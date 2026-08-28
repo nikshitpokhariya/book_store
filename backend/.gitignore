@@ -1,0 +1,48 @@
+# ============================================================
+# Backend - CMake / C++
+# ============================================================
+
+# CMake build directories
+/build/
+/build-*/
+/cmake-build-*/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+
+# Compiled binaries
+*.exe
+*.dll
+*.lib
+*.obj
+*.o
+
+# Debug / release files
+*.pdb
+*.ilk
+*.exp
+
+# vcpkg manifest-mode installation
+/vcpkg_installed/
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+
+# Environment / secrets
+.env
+.env.*
+!.env.example

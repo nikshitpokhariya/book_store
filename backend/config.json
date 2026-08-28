@@ -1,0 +1,19 @@
+{
+    "listeners": [
+        {
+            "address": "0.0.0.0",
+            "port": 8080
+        }
+    ],
+
+    "app": {
+        "threads_num": 4,
+        "enable_session": false,
+        "document_root": "./public"
+    },
+
+    "log": {
+        "log_level": "INFO",
+        "log_local_time": true
+    }
+}
