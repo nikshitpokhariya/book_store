@@ -1,0 +1,12 @@
+{
+    "name": "book-exchange",
+    "version-string": "1.0.0",
+    "dependencies": [
+        "drogon",
+        "mongo-cxx-driver",
+        "argon2",
+        "openssl",
+        "jwt-cpp",
+        "jsoncpp"
+    ]
+}
