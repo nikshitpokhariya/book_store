@@ -48,7 +48,7 @@ target_include_directories(${PROJECT_NAME}
 )
 
 # ==============================
-# Compile definitions
+# Compile definitions & Link Options
 # ==============================
 
 # On Windows, prevent <windows.h> from defining min/max macros
@@ -58,6 +58,13 @@ if(WIN32)
         PRIVATE
             WIN32_LEAN_AND_MEAN
             NOMINMAX
+    )
+endif()
+
+if(MSVC)
+    target_link_options(${PROJECT_NAME}
+        PRIVATE
+            /OPT:NOREF
     )
 endif()
 
