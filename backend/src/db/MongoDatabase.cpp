@@ -26,6 +26,7 @@ void MongoDatabase::ensureIndexes() {
 
   auto users = db["users"];
   auto sessions = db["sessions"];
+  auto books = db["books"];
 
   // users.username UNIQUE
   {
@@ -57,5 +58,35 @@ void MongoDatabase::ensureIndexes() {
     options.expire_after(std::chrono::seconds(0));
 
     sessions.create_index(make_document(kvp("expiresAt", 1)), options);
+  }
+
+  // 1. Books belonging to a user
+  {
+    books.create_index(make_document(kvp("ownerId", 1)));
+  }
+
+  // 2. Available books sorted by
+  {
+    books.create_index(make_document(kvp("status", 1), kvp("createdAt", -1)));
+  }
+
+  // 3. Genre + status
+  {
+    books.create_index(make_document(kvp("genre", 1), kvp("status", 1)));
+  }
+
+  // 4. Listing type + status
+  {
+    books.create_index(make_document(kvp("listingType", 1), kvp("status", 1)));
+  }
+
+  // 5. City + status
+  {
+    books.create_index(make_document(kvp("city", 1), kvp("status", 1)));
+  }
+
+  // 6. Price
+  {
+    books.create_index(make_document(kvp("price", 1)));
   }
 }

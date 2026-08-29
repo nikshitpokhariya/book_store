@@ -1,6 +1,8 @@
 #include <drogon/drogon.h>
 
 #include "config/AppConfig.h"
+#include "controllers/AuthController.h"
+#include "controllers/BookController.h"
 #include "db/MongoDatabase.h"
 
 int main() {
@@ -10,6 +12,9 @@ int main() {
     auto &mongo = MongoDatabase::instance();
 
     mongo.ensureIndexes();
+
+    AuthController::initPathRouting();
+    BookController::initPathRouting();
 
     drogon::app().loadConfigFile("config.json").run();
   } catch (const std::exception &e) {
