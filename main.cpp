@@ -13,7 +13,6 @@ int main(int argc, char *argv[])
     }
 
     LoginWindow loginWindow;
-
     loginWindow.show();
 
     return app.exec();

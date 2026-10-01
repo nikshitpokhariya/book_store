@@ -1,7 +1,10 @@
 #include "loginwindow.h"
+
 #include "database.h"
 #include "signupwindow.h"
-#include "dashboard.h"
+#include "homewindow.h"
+#include "browsewindow.h"
+#include "sellwindow.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -11,21 +14,42 @@
 #include <QFrame>
 #include <QMessageBox>
 
+
+// =========================================================
+// CONSTRUCTOR
+// =========================================================
+
 LoginWindow::LoginWindow(QWidget *parent)
-    : QWidget(parent)
+    : QWidget(parent),
+    emailEdit(nullptr),
+    passwordEdit(nullptr),
+    loginButton(nullptr),
+    signupButton(nullptr),
+    logoLabel(nullptr),
+    taglineLabel(nullptr),
+    descriptionLabel(nullptr),
+    welcomeLabel(nullptr),
+    loginSubtitleLabel(nullptr),
+    accountLabel(nullptr)
 {
     setWindowTitle("BookBazzar - Login");
 
     resize(950, 600);
+
     setMinimumSize(800, 500);
+
 
     // =====================================================
     // MAIN LAYOUT
     // =====================================================
 
-    QHBoxLayout *mainLayout = new QHBoxLayout(this);
+    QHBoxLayout *mainLayout =
+        new QHBoxLayout(this);
 
-    mainLayout->setContentsMargins(30, 30, 30, 30);
+    mainLayout->setContentsMargins(
+        30, 30, 30, 30
+        );
+
     mainLayout->setSpacing(0);
 
 
@@ -33,9 +57,12 @@ LoginWindow::LoginWindow(QWidget *parent)
     // LEFT PANEL
     // =====================================================
 
-    QFrame *leftPanel = new QFrame(this);
+    QFrame *leftPanel =
+        new QFrame(this);
 
-    leftPanel->setObjectName("leftPanel");
+    leftPanel->setObjectName(
+        "leftPanel"
+        );
 
     QVBoxLayout *leftLayout =
         new QVBoxLayout(leftPanel);
@@ -47,19 +74,25 @@ LoginWindow::LoginWindow(QWidget *parent)
     leftLayout->setSpacing(15);
 
 
-    // BookBazzar logo
+    // =====================================================
+    // LOGO
+    // =====================================================
 
     logoLabel =
         new QLabel("BookBazzar");
 
-    logoLabel->setObjectName("logoLabel");
+    logoLabel->setObjectName(
+        "logoLabel"
+        );
 
     logoLabel->setAlignment(
         Qt::AlignCenter
         );
 
 
-    // Tagline
+    // =====================================================
+    // TAGLINE
+    // =====================================================
 
     taglineLabel =
         new QLabel(
@@ -75,13 +108,15 @@ LoginWindow::LoginWindow(QWidget *parent)
         );
 
 
-    // Description
+    // =====================================================
+    // DESCRIPTION
+    // =====================================================
 
     descriptionLabel =
         new QLabel(
             "Give your books a second chapter.\n\n"
-            "Find your next favorite book or sell "
-            "the ones you no longer need."
+            "Find affordable books from other readers "
+            "or sell the books you no longer need."
             );
 
     descriptionLabel->setObjectName(
@@ -92,18 +127,26 @@ LoginWindow::LoginWindow(QWidget *parent)
         Qt::AlignCenter
         );
 
-    descriptionLabel->setWordWrap(true);
+    descriptionLabel->setWordWrap(
+        true
+        );
 
 
     leftLayout->addStretch();
 
-    leftLayout->addWidget(logoLabel);
+    leftLayout->addWidget(
+        logoLabel
+        );
 
-    leftLayout->addWidget(taglineLabel);
+    leftLayout->addWidget(
+        taglineLabel
+        );
 
     leftLayout->addSpacing(25);
 
-    leftLayout->addWidget(descriptionLabel);
+    leftLayout->addWidget(
+        descriptionLabel
+        );
 
     leftLayout->addStretch();
 
@@ -112,9 +155,12 @@ LoginWindow::LoginWindow(QWidget *parent)
     // RIGHT PANEL
     // =====================================================
 
-    QFrame *rightPanel = new QFrame(this);
+    QFrame *rightPanel =
+        new QFrame(this);
 
-    rightPanel->setObjectName("rightPanel");
+    rightPanel->setObjectName(
+        "rightPanel"
+        );
 
     QVBoxLayout *rightLayout =
         new QVBoxLayout(rightPanel);
@@ -127,7 +173,7 @@ LoginWindow::LoginWindow(QWidget *parent)
 
 
     // =====================================================
-    // WELCOME LABEL
+    // WELCOME
     // =====================================================
 
     welcomeLabel =
@@ -175,7 +221,9 @@ LoginWindow::LoginWindow(QWidget *parent)
         "Enter your email"
         );
 
-    emailEdit->setMinimumHeight(45);
+    emailEdit->setMinimumHeight(
+        45
+        );
 
 
     // =====================================================
@@ -197,7 +245,9 @@ LoginWindow::LoginWindow(QWidget *parent)
         QLineEdit::Password
         );
 
-    passwordEdit->setMinimumHeight(45);
+    passwordEdit->setMinimumHeight(
+        45
+        );
 
 
     // =====================================================
@@ -211,7 +261,9 @@ LoginWindow::LoginWindow(QWidget *parent)
         "loginButton"
         );
 
-    loginButton->setMinimumHeight(48);
+    loginButton->setMinimumHeight(
+        48
+        );
 
 
     // =====================================================
@@ -245,11 +297,13 @@ LoginWindow::LoginWindow(QWidget *parent)
         "signupButton"
         );
 
-    signupButton->setMinimumHeight(40);
+    signupButton->setMinimumHeight(
+        40
+        );
 
 
     // =====================================================
-    // ADD WIDGETS TO RIGHT PANEL
+    // ADD WIDGETS
     // =====================================================
 
     rightLayout->addStretch();
@@ -292,7 +346,7 @@ LoginWindow::LoginWindow(QWidget *parent)
 
 
     // =====================================================
-    // ADD PANELS TO MAIN LAYOUT
+    // ADD PANELS
     // =====================================================
 
     mainLayout->addWidget(
@@ -307,7 +361,7 @@ LoginWindow::LoginWindow(QWidget *parent)
 
 
     // =====================================================
-    // UI STYLING
+    // STYLING
     // =====================================================
 
     setStyleSheet(R"(
@@ -318,47 +372,40 @@ LoginWindow::LoginWindow(QWidget *parent)
 
         #leftPanel {
             background-color: #1E293B;
-
             border-top-left-radius: 20px;
             border-bottom-left-radius: 20px;
         }
 
         #rightPanel {
             background-color: white;
-
             border-top-right-radius: 20px;
             border-bottom-right-radius: 20px;
         }
 
         #logoLabel {
             color: white;
-
             font-size: 36px;
             font-weight: bold;
         }
 
         #taglineLabel {
             color: #CBD5E1;
-
             font-size: 18px;
         }
 
         #descriptionLabel {
             color: #CBD5E1;
-
             font-size: 15px;
         }
 
         #welcomeLabel {
             color: #0F172A;
-
             font-size: 30px;
             font-weight: bold;
         }
 
         #loginSubtitleLabel {
             color: #64748B;
-
             font-size: 15px;
         }
 
@@ -366,11 +413,9 @@ LoginWindow::LoginWindow(QWidget *parent)
         #passwordEdit {
 
             background-color: #F8FAFC;
-
             color: #0F172A;
 
             border: 1px solid #CBD5E1;
-
             border-radius: 10px;
 
             padding-left: 14px;
@@ -383,57 +428,46 @@ LoginWindow::LoginWindow(QWidget *parent)
         #passwordEdit:focus {
 
             border: 2px solid #2563EB;
-
             background-color: white;
         }
 
         #loginButton {
 
             background-color: #2563EB;
-
             color: white;
 
             border: none;
-
             border-radius: 10px;
 
             font-size: 16px;
-
             font-weight: bold;
         }
 
         #loginButton:hover {
-
             background-color: #1D4ED8;
         }
 
         #loginButton:pressed {
-
             background-color: #1E40AF;
         }
 
         #signupButton {
 
             background-color: transparent;
-
             color: #2563EB;
 
             border: none;
 
             font-size: 15px;
-
             font-weight: bold;
         }
 
         #signupButton:hover {
-
             color: #1D4ED8;
         }
 
         #accountLabel {
-
             color: #64748B;
-
             font-size: 14px;
         }
 
@@ -441,7 +475,7 @@ LoginWindow::LoginWindow(QWidget *parent)
 
 
     // =====================================================
-    // BUTTON CONNECTIONS
+    // CONNECTIONS
     // =====================================================
 
     connect(
@@ -460,8 +494,6 @@ LoginWindow::LoginWindow(QWidget *parent)
         );
 
 
-    // Press Enter in password field to login
-
     connect(
         passwordEdit,
         &QLineEdit::returnPressed,
@@ -469,8 +501,6 @@ LoginWindow::LoginWindow(QWidget *parent)
         &LoginWindow::handleLogin
         );
 
-
-    // Press Enter in email field to move to password
 
     connect(
         emailEdit,
@@ -482,8 +512,6 @@ LoginWindow::LoginWindow(QWidget *parent)
         }
         );
 
-
-    // Start with email field selected
 
     emailEdit->setFocus();
 }
@@ -499,7 +527,7 @@ LoginWindow::~LoginWindow()
 
 
 // =========================================================
-// LOGIN FUNCTION
+// LOGIN
 // =========================================================
 
 void LoginWindow::handleLogin()
@@ -511,9 +539,9 @@ void LoginWindow::handleLogin()
         passwordEdit->text();
 
 
-    // -----------------------------------------------------
-    // CHECK EMAIL
-    // -----------------------------------------------------
+    // =====================================================
+    // VALIDATION
+    // =====================================================
 
     if (email.isEmpty())
     {
@@ -529,10 +557,6 @@ void LoginWindow::handleLogin()
     }
 
 
-    // -----------------------------------------------------
-    // CHECK PASSWORD
-    // -----------------------------------------------------
-
     if (password.isEmpty())
     {
         QMessageBox::warning(
@@ -547,9 +571,9 @@ void LoginWindow::handleLogin()
     }
 
 
-    // -----------------------------------------------------
-    // LOGIN USING DATABASE CLASS
-    // -----------------------------------------------------
+    // =====================================================
+    // DATABASE LOGIN
+    // =====================================================
 
     Database &database =
         Database::instance();
@@ -561,9 +585,9 @@ void LoginWindow::handleLogin()
             );
 
 
-    // -----------------------------------------------------
-    // LOGIN SUCCESSFUL
-    // -----------------------------------------------------
+    // =====================================================
+    // LOGIN SUCCESS
+    // =====================================================
 
     if (success)
     {
@@ -571,36 +595,31 @@ void LoginWindow::handleLogin()
             database.getUserName(email);
 
 
-        QMessageBox::information(
-            this,
-            "Login Successful",
-            "Welcome back, " +
-                userName +
-                "!"
+        // =================================================
+        // CREATE HOME WINDOW
+        // =================================================
+
+        HomeWindow *homeWindow =
+            new HomeWindow(
+                userName
+                );
+
+        homeWindow->setAttribute(
+            Qt::WA_DeleteOnClose
             );
 
 
-        // Create dashboard
-
-        Dashboard *dashboard =
-            new Dashboard();
-
-
-        // Give dashboard the logged-in user's email
-
-        dashboard->setUser(email);
-
-
-        // When logout is requested,
-        // show the login window again
+        // =================================================
+        // LOGOUT
+        // =================================================
 
         connect(
-            dashboard,
-            &Dashboard::logoutRequested,
+            homeWindow,
+            &HomeWindow::logoutRequested,
             this,
-            [this, dashboard]()
+            [this, homeWindow]()
             {
-                dashboard->close();
+                homeWindow->close();
 
                 this->show();
 
@@ -617,12 +636,125 @@ void LoginWindow::handleLogin()
             );
 
 
-        // Show dashboard
+        // =================================================
+        // BROWSE BOOKS
+        // =================================================
 
-        dashboard->show();
+        connect(
+            homeWindow,
+            &HomeWindow::browseBooksRequested,
+            this,
+            [homeWindow]()
+            {
+                BrowseWindow *browseWindow =
+                    new BrowseWindow(
+                        homeWindow->windowTitle()
+                        );
+
+                browseWindow->setAttribute(
+                    Qt::WA_DeleteOnClose
+                    );
 
 
-        // Hide login window
+                connect(
+                    browseWindow,
+                    &BrowseWindow::backRequested,
+                    browseWindow,
+                    [browseWindow]()
+                    {
+                        browseWindow->close();
+                    }
+                    );
+
+
+                browseWindow->show();
+
+                browseWindow->raise();
+
+                browseWindow->activateWindow();
+            }
+            );
+
+
+        // =================================================
+        // SELL BOOK
+        // =================================================
+
+        connect(
+            homeWindow,
+            &HomeWindow::sellBookRequested,
+            this,
+            [homeWindow, userName]()
+            {
+                SellWindow *sellWindow =
+                    new SellWindow(
+                        userName,
+                        homeWindow
+                        );
+
+
+                sellWindow->setAttribute(
+                    Qt::WA_DeleteOnClose
+                    );
+
+
+                // -----------------------------------------
+                // BACK BUTTON
+                // -----------------------------------------
+
+                connect(
+                    sellWindow,
+                    &SellWindow::backRequested,
+                    sellWindow,
+                    [sellWindow]()
+                    {
+                        sellWindow->close();
+                    }
+                    );
+
+
+                // -----------------------------------------
+                // BOOK ADDED
+                // -----------------------------------------
+
+                connect(
+                    sellWindow,
+                    &SellWindow::bookAdded,
+                    homeWindow,
+                    [homeWindow]()
+                    {
+                        homeWindow->refreshRecentBooks();
+                    }
+                    );
+
+
+                // -----------------------------------------
+                // SHOW SELL WINDOW
+                // -----------------------------------------
+
+                sellWindow->show();
+
+                sellWindow->raise();
+
+                sellWindow->activateWindow();
+            }
+            );
+
+
+        // =================================================
+        // SHOW HOME WINDOW
+        // =================================================
+
+        homeWindow->show();
+
+        homeWindow->raise();
+
+        homeWindow->activateWindow();
+
+
+        // =================================================
+        // HIDE LOGIN WINDOW
+        // =================================================
 
         this->hide();
 
@@ -630,9 +762,9 @@ void LoginWindow::handleLogin()
     }
 
 
-    // -----------------------------------------------------
+    // =====================================================
     // LOGIN FAILED
-    // -----------------------------------------------------
+    // =====================================================
 
     QMessageBox::warning(
         this,
@@ -648,7 +780,7 @@ void LoginWindow::handleLogin()
 
 
 // =========================================================
-// OPEN SIGNUP WINDOW
+// SIGNUP
 // =========================================================
 
 void LoginWindow::openSignup()
@@ -657,21 +789,21 @@ void LoginWindow::openSignup()
         new SignupWindow();
 
 
-    // Delete signup window when it is closed
-
     signupWindow->setAttribute(
         Qt::WA_DeleteOnClose
         );
 
 
-    // Hide login
+    // =====================================================
+    // HIDE LOGIN
+    // =====================================================
 
     this->hide();
 
 
-    // -----------------------------------------------------
-    // WHEN SIGNUP IS SUCCESSFUL
-    // -----------------------------------------------------
+    // =====================================================
+    // SIGNUP SUCCESSFUL
+    // =====================================================
 
     connect(
         signupWindow,
@@ -685,14 +817,18 @@ void LoginWindow::openSignup()
 
             this->activateWindow();
 
+            emailEdit->clear();
+
+            passwordEdit->clear();
+
             emailEdit->setFocus();
         }
         );
 
 
-    // -----------------------------------------------------
-    // SHOW SIGNUP WINDOW
-    // -----------------------------------------------------
+    // =====================================================
+    // SHOW SIGNUP
+    // =====================================================
 
     signupWindow->show();
 

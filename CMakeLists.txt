@@ -33,6 +33,11 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         dashboard.h
         dashboard.cpp
         loginwindow.ui
+        homewindow.h homewindow.cpp
+        sellbookwindow.h sellbookwindow.cpp
+        browsewindow.h browsewindow.cpp
+        bookdetailswindow.h bookdetailswindow.cpp
+        sellwindow.h sellwindow.cpp
     )
 
 else()

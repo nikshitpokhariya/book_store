@@ -13,7 +13,7 @@ class LoginWindow : public QWidget
 
 public:
     explicit LoginWindow(QWidget *parent = nullptr);
-    ~LoginWindow();
+    ~LoginWindow() override;
 
 private slots:
     void handleLogin();

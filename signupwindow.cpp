@@ -201,7 +201,7 @@ void SignupWindow::handleSignup()
     Database &database =
         Database::instance();
 
-    if (database.emailExists(email))
+    if (database.userExists(email))
     {
         QMessageBox::warning(
             this,
