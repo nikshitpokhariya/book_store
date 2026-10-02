@@ -23,25 +23,35 @@ A high-performance C++20 REST API built with the [Drogon](https://github.com/dro
 
 The project adheres to a clean layered architecture with clear separation of concerns:
 
+> **Repository Structure**: This backend lives at `backend/` inside the monorepo. The Qt desktop frontend is at `frontend/`. See the root `README.md` or the [frontend README](../frontend/README.md) for the frontend overview.
+
 ```
 backend/
 ├── CMakeLists.txt              # Build system & vcpkg dependency management
 ├── vcpkg.json                  # C++ library manifest (Drogon, mongocxx, Argon2, jwt-cpp)
 ├── config.json                 # Drogon listener, threading & upload configuration
+├── start_server.ps1            # PowerShell helper script to set env vars and launch server
 ├── include/
 │   ├── config/AppConfig.h      # Environment variable configuration loader (Singleton)
 │   ├── db/MongoDatabase.h      # Thread-safe MongoDB client & automated index manager
 │   ├── filters/AuthFilter.h    # Drogon Bearer JWT authentication filter
 │   ├── security/
-│   │   ├── PasswordHasher.h    # Argon2id password hasher with OpenSSL CSPRNG salt
-│   │   ├── TokenService.h      # HS256 JWT & SHA-256 refresh token manager
+│   │   ├── PasswordHasher.hpp  # Argon2id password hasher with OpenSSL CSPRNG salt
+│   │   ├── TokenService.hpp    # HS256 JWT & SHA-256 refresh token manager
 │   │   └── PaymentService.hpp  # Pluggable demo payment simulation provider
 │   ├── models/                 # Plain domain structs (User, Session, Book, Cart, Order, Exchange, Review)
 │   ├── repositories/           # MongoDB data access layer using mongocxx/bsoncxx
 │   ├── services/               # Business logic & transaction orchestration
 │   └── controllers/            # Drogon HTTP REST controllers
-└── src/                        # Implementations matching include/
-    └── main.cpp                # Application entrypoint & graceful signal handler
+├── src/                        # Implementations matching include/
+│   └── main.cpp                # Application entrypoint & graceful signal handler
+└── tests/                      # PowerShell integration test suites & Postman collection
+    ├── test_qa_suite.ps1        # Master QA suite (91 tests)
+    ├── test_marketplace.ps1     # Phase 1 — Book marketplace (16 tests)
+    ├── test_buy_sell.ps1        # Phase 2 — Cart, checkout & payment (23 tests)
+    ├── test_exchange.ps1        # Phase 3 — Peer-to-peer exchange (24 tests)
+    ├── test_phase4.ps1          # Phase 4 — Reviews, cancel & returns (24 tests)
+    └── BookExchangeBackend.postman_collection.json
 ```
 
 ---
