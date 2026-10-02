@@ -13,8 +13,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Qt Components
 # ==============================
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Sql)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Sql Network)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql Network)
 
 # ==============================
 # Source files
@@ -33,6 +33,12 @@ set(PROJECT_SOURCES
     src/orderswindow.cpp
     src/sellwindow.cpp
     src/sellbookwindow.cpp
+    src/network/ApiClient.cpp
+    src/auth/SessionManager.cpp
+    src/windows/CartWindow.cpp
+    src/windows/CheckoutWindow.cpp
+    src/windows/OrderDetailWindow.cpp
+    src/windows/ExchangeWindow.cpp
 
     include/database.h
     include/loginwindow.h
@@ -45,6 +51,13 @@ set(PROJECT_SOURCES
     include/orderswindow.h
     include/sellwindow.h
     include/sellbookwindow.h
+    include/network/ApiClient.h
+    include/auth/SessionManager.h
+    include/models/DataModels.h
+    include/windows/CartWindow.h
+    include/windows/CheckoutWindow.h
+    include/windows/OrderDetailWindow.h
+    include/windows/ExchangeWindow.h
 
     ui/loginwindow.ui
 )
@@ -77,6 +90,13 @@ endif()
 target_include_directories(BookBazzar
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/network
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/auth
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/models
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/windows
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/network
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/auth
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/windows
 )
 
 # ==============================
@@ -86,6 +106,7 @@ target_include_directories(BookBazzar
 target_link_libraries(BookBazzar PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
+    Qt${QT_VERSION_MAJOR}::Network
 )
 
 # ==============================
@@ -114,4 +135,94 @@ install(TARGETS BookBazzar
 
 if(QT_VERSION_MAJOR EQUAL 6)
     qt_finalize_executable(BookBazzar)
+endif()
+
+# ==============================
+# Testing
+# ==============================
+find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Test QUIET)
+if(Qt${QT_VERSION_MAJOR}Test_FOUND)
+    enable_testing()
+    add_executable(BookBazzarTests
+        tests/main_test.cpp
+        tests/test_datamodels.cpp
+        tests/test_sessionmanager.cpp
+        tests/test_validation.cpp
+        tests/test_apiclient.cpp
+        src/network/ApiClient.cpp
+        src/auth/SessionManager.cpp
+        include/network/ApiClient.h
+        include/auth/SessionManager.h
+    )
+    target_include_directories(BookBazzarTests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/network
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/auth
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/models
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests
+    )
+    target_link_libraries(BookBazzarTests PRIVATE
+        Qt${QT_VERSION_MAJOR}::Core
+        Qt${QT_VERSION_MAJOR}::Network
+        Qt${QT_VERSION_MAJOR}::Test
+    )
+    add_test(NAME BookBazzarTests COMMAND BookBazzarTests)
+
+    add_executable(BookBazzarGuiSmokeTest
+        tests/gui_smoke_test.cpp
+        src/database.cpp
+        src/loginwindow.cpp
+        src/signupwindow.cpp
+        src/dashboard.cpp
+        src/homewindow.cpp
+        src/browsewindow.cpp
+        src/bookdetailswindow.cpp
+        src/listingswindow.cpp
+        src/orderswindow.cpp
+        src/sellwindow.cpp
+        src/sellbookwindow.cpp
+        src/network/ApiClient.cpp
+        src/auth/SessionManager.cpp
+        src/windows/CartWindow.cpp
+        src/windows/CheckoutWindow.cpp
+        src/windows/OrderDetailWindow.cpp
+        src/windows/ExchangeWindow.cpp
+        include/database.h
+        include/loginwindow.h
+        include/signupwindow.h
+        include/dashboard.h
+        include/homewindow.h
+        include/browsewindow.h
+        include/bookdetailswindow.h
+        include/listingswindow.h
+        include/orderswindow.h
+        include/sellwindow.h
+        include/sellbookwindow.h
+        include/network/ApiClient.h
+        include/auth/SessionManager.h
+        include/models/DataModels.h
+        include/windows/CartWindow.h
+        include/windows/CheckoutWindow.h
+        include/windows/OrderDetailWindow.h
+        include/windows/ExchangeWindow.h
+        ui/loginwindow.ui
+    )
+    target_include_directories(BookBazzarGuiSmokeTest PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/network
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/auth
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/models
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/windows
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/network
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/auth
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/windows
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests
+    )
+    target_link_libraries(BookBazzarGuiSmokeTest PRIVATE
+        Qt${QT_VERSION_MAJOR}::Widgets
+        Qt${QT_VERSION_MAJOR}::Sql
+        Qt${QT_VERSION_MAJOR}::Network
+        Qt${QT_VERSION_MAJOR}::Test
+    )
+    add_test(NAME BookBazzarGuiSmokeTest COMMAND BookBazzarGuiSmokeTest)
 endif()

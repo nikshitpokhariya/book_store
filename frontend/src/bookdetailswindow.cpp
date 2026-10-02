@@ -1,10 +1,10 @@
 #include "bookdetailswindow.h"
-#include "database.h"
+#include "network/ApiClient.h"
+#include "auth/SessionManager.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGridLayout>
-
 #include <QLabel>
 #include <QPushButton>
 #include <QFrame>
@@ -13,14 +13,21 @@
 #include <QSizePolicy>
 #include <QPixmap>
 #include <QFont>
-
+#include <QFileInfo>
+#include <QPainter>
+#include <QLinearGradient>
+#include <QNetworkReply>
+#include <QComboBox>
+#include <QTextEdit>
+#include <QDialog>
+#include <QUrlQuery>
 
 // =========================================================
 // CONSTRUCTOR
 // =========================================================
 
 BookDetailsWindow::BookDetailsWindow(
-    int bookId,
+    const QString &bookId,
     const QString &userName,
     QWidget *parent
     )
@@ -33,41 +40,27 @@ BookDetailsWindow::BookDetailsWindow(
     conditionLabel(nullptr),
     categoryLabel(nullptr),
     isbnLabel(nullptr),
-    locationLabel(nullptr),
     sellerLabel(nullptr),
+    ratingLabel(nullptr),
     descriptionLabel(nullptr),
     coverLabel(nullptr),
+    reviewsLayout(nullptr),
     orderButton(nullptr),
+    exchangeButton(nullptr),
     backButton(nullptr)
 {
-    setWindowTitle(
-        "BookBazzar - Book Details"
-        );
-
-    resize(
-        1400,
-        850
-        );
-
-    setMinimumSize(
-        1000,
-        650
-        );
+    setWindowTitle("BookBazzar - Book Details");
+    resize(1400, 850);
+    setMinimumSize(1000, 650);
 
     setupUI();
-
     loadBook();
+    loadReviews();
 }
-
-
-// =========================================================
-// DESTRUCTOR
-// =========================================================
 
 BookDetailsWindow::~BookDetailsWindow()
 {
 }
-
 
 // =========================================================
 // SETUP UI
@@ -76,135 +69,56 @@ BookDetailsWindow::~BookDetailsWindow()
 void BookDetailsWindow::setupUI()
 {
     setStyleSheet(R"(
-
         QWidget {
             font-family: "Segoe UI";
         }
-
         QScrollArea {
             border: none;
             background-color: #F7F8FC;
         }
-
         QScrollBar:vertical {
             width: 10px;
             background: transparent;
             margin: 4px;
         }
-
         QScrollBar::handle:vertical {
             background: #C7CBD6;
             border-radius: 5px;
             min-height: 45px;
         }
-
         QScrollBar::handle:vertical:hover {
             background: #A5A9B4;
         }
-
         QScrollBar::add-line:vertical,
         QScrollBar::sub-line:vertical {
             height: 0px;
         }
-
-        QScrollBar:horizontal {
-            height: 0px;
-        }
-
     )");
 
-
-    // =====================================================
-    // SCROLL AREA
-    // =====================================================
-
-    QScrollArea *scrollArea =
-        new QScrollArea(this);
-
+    QScrollArea *scrollArea = new QScrollArea(this);
     scrollArea->setWidgetResizable(true);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea->setFrameShape(QFrame::NoFrame);
 
-    scrollArea->setHorizontalScrollBarPolicy(
-        Qt::ScrollBarAlwaysOff
-        );
+    QWidget *page = new QWidget();
+    page->setStyleSheet("background-color: #F7F8FC;");
 
-    scrollArea->setVerticalScrollBarPolicy(
-        Qt::ScrollBarAsNeeded
-        );
+    QVBoxLayout *pageLayout = new QVBoxLayout(page);
+    pageLayout->setContentsMargins(0, 0, 0, 40);
+    pageLayout->setSpacing(25);
 
-    scrollArea->setFrameShape(
-        QFrame::NoFrame
-        );
+    pageLayout->addWidget(createTopBar());
+    pageLayout->addWidget(createDetailsSection());
+    pageLayout->addWidget(createReviewsSection());
 
+    scrollArea->setWidget(page);
 
-    // =====================================================
-    // PAGE
-    // =====================================================
-
-    QWidget *page =
-        new QWidget();
-
-    page->setStyleSheet(
-        "background-color: #F7F8FC;"
-        );
-
-
-    QVBoxLayout *pageLayout =
-        new QVBoxLayout(page);
-
-    pageLayout->setContentsMargins(
-        0,
-        0,
-        0,
-        0
-        );
-
-    pageLayout->setSpacing(0);
-
-
-    // =====================================================
-    // TOP BAR
-    // =====================================================
-
-    pageLayout->addWidget(
-        createTopBar()
-        );
-
-
-    // =====================================================
-    // DETAILS
-    // =====================================================
-
-    pageLayout->addWidget(
-        createDetailsSection()
-        );
-
-
-    scrollArea->setWidget(
-        page
-        );
-
-
-    // =====================================================
-    // MAIN LAYOUT
-    // =====================================================
-
-    QVBoxLayout *mainLayout =
-        new QVBoxLayout(this);
-
-    mainLayout->setContentsMargins(
-        0,
-        0,
-        0,
-        0
-        );
-
+    QVBoxLayout *mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
-
-    mainLayout->addWidget(
-        scrollArea
-        );
+    mainLayout->addWidget(scrollArea);
 }
-
 
 // =========================================================
 // TOP BAR
@@ -212,191 +126,55 @@ void BookDetailsWindow::setupUI()
 
 QWidget* BookDetailsWindow::createTopBar()
 {
-    QFrame *bar =
-        new QFrame();
-
-    bar->setFixedHeight(
-        76
-        );
-
-    bar->setStyleSheet(R"(
-
+    QFrame *topBar = new QFrame();
+    topBar->setFixedHeight(76);
+    topBar->setStyleSheet(R"(
         QFrame {
             background-color: white;
-            border-bottom: 1px solid #E5E7EB;
+            border-bottom: 1px solid #E6E8EF;
         }
-
     )");
 
+    QHBoxLayout *layout = new QHBoxLayout(topBar);
+    layout->setContentsMargins(32, 10, 32, 10);
+    layout->setSpacing(15);
 
-    QHBoxLayout *layout =
-        new QHBoxLayout(bar);
-
-    layout->setContentsMargins(
-        32,
-        10,
-        32,
-        10
-        );
-
-    layout->setSpacing(8);
-
-
-    // =====================================================
-    // LOGO
-    // =====================================================
-
-    QLabel *logo =
-        new QLabel(
-            "BookBazzar"
-            );
-
-    logo->setStyleSheet(R"(
-
-        QLabel {
-            color: #172033;
-            font-size: 25px;
-            font-weight: 800;
-        }
-
-    )");
-
-    layout->addWidget(
-        logo
-        );
-
-
-    QLabel *dot =
-        new QLabel(
-            "."
-            );
-
-    dot->setStyleSheet(R"(
-
-        QLabel {
-            color: #5B5FEF;
-            font-size: 30px;
-            font-weight: 800;
-        }
-
-    )");
-
-    layout->addWidget(
-        dot
-        );
-
-
-    layout->addSpacing(
-        30
-        );
-
-
-    // =====================================================
-    // PAGE TITLE
-    // =====================================================
-
-    QLabel *pageTitle =
-        new QLabel(
-            "Book Details"
-            );
-
-    pageTitle->setStyleSheet(R"(
-
-        QLabel {
-            color: #6B7280;
-            font-size: 13px;
-            font-weight: 600;
-        }
-
-    )");
-
-    layout->addWidget(
-        pageTitle
-        );
-
-
-    layout->addStretch();
-
-
-    // =====================================================
-    // USER
-    // =====================================================
-
-    QLabel *userLabel =
-        new QLabel(
-            "Hello, " + userName
-            );
-
-    userLabel->setStyleSheet(R"(
-
-        QLabel {
-            color: #374151;
-            font-size: 14px;
-            font-weight: 600;
-            padding-right: 15px;
-        }
-
-    )");
-
-    layout->addWidget(
-        userLabel
-        );
-
-
-    // =====================================================
-    // BACK BUTTON
-    // =====================================================
-
-    backButton =
-        new QPushButton(
-            "← Back"
-            );
-
-    backButton->setMinimumSize(
-        90,
-        40
-        );
-
+    backButton = new QPushButton("← Back to Browse");
+    backButton->setMinimumHeight(40);
+    backButton->setCursor(Qt::PointingHandCursor);
     backButton->setStyleSheet(R"(
-
         QPushButton {
-            background-color: #F8F9FC;
+            background: transparent;
+            border: 1px solid #E5E7EB;
             color: #374151;
-            border: 1px solid #E1E4EA;
-            border-radius: 9px;
-            padding: 0 15px;
+            padding: 0 16px;
             font-size: 13px;
             font-weight: 700;
+            border-radius: 8px;
         }
-
         QPushButton:hover {
-            background-color: #F3F4FF;
-            color: #4F46E5;
-            border-color: #C7D2FE;
+            background-color: #F3F4F6;
+            color: #111827;
         }
-
-        QPushButton:pressed {
-            background-color: #EDE9FE;
-        }
-
     )");
 
-    layout->addWidget(
-        backButton
-        );
+    QLabel *pageTitle = new QLabel("Book Details");
+    pageTitle->setStyleSheet(R"(
+        QLabel {
+            color: #172033;
+            font-size: 20px;
+            font-weight: 800;
+        }
+    )");
 
+    layout->addWidget(backButton);
+    layout->addWidget(pageTitle);
+    layout->addStretch();
 
-    connect(
-        backButton,
-        &QPushButton::clicked,
-        this,
-        &BookDetailsWindow::handleBack
-        );
+    connect(backButton, &QPushButton::clicked, this, &BookDetailsWindow::handleBack);
 
-
-    return bar;
+    return topBar;
 }
-
 
 // =========================================================
 // DETAILS SECTION
@@ -404,918 +182,524 @@ QWidget* BookDetailsWindow::createTopBar()
 
 QWidget* BookDetailsWindow::createDetailsSection()
 {
-    QWidget *section =
-        new QWidget();
+    QWidget *container = new QWidget();
+    QHBoxLayout *mainLayout = new QHBoxLayout(container);
+    mainLayout->setContentsMargins(32, 0, 32, 0);
+    mainLayout->setSpacing(35);
 
-    section->setStyleSheet(
-        "background-color: #F7F8FC;"
-        );
-
-
-    QVBoxLayout *mainLayout =
-        new QVBoxLayout(section);
-
-    mainLayout->setContentsMargins(
-        45,
-        35,
-        45,
-        45
-        );
-
-    mainLayout->setSpacing(25);
-
-
-    // =====================================================
-    // MAIN CARD
-    // =====================================================
-
-    QFrame *mainCard =
-        new QFrame();
-
-    mainCard->setStyleSheet(R"(
-
+    // Left Column: Cover Image & Actions
+    QFrame *leftCard = new QFrame();
+    leftCard->setFixedWidth(340);
+    leftCard->setStyleSheet(R"(
         QFrame {
             background-color: white;
             border: 1px solid #E5E7EB;
-            border-radius: 18px;
+            border-radius: 16px;
         }
-
     )");
 
+    QVBoxLayout *leftLayout = new QVBoxLayout(leftCard);
+    leftLayout->setContentsMargins(20, 20, 20, 20);
+    leftLayout->setSpacing(18);
 
-    QHBoxLayout *cardLayout =
-        new QHBoxLayout(mainCard);
-
-    cardLayout->setContentsMargins(
-        25,
-        25,
-        25,
-        25
-        );
-
-    cardLayout->setSpacing(30);
-
-
-    // =====================================================
-    // COVER
-    // =====================================================
-
-    coverLabel =
-        new QLabel();
-
-    coverLabel->setFixedSize(
-        300,
-        390
-        );
-
-    coverLabel->setAlignment(
-        Qt::AlignCenter
-        );
-
+    coverLabel = new QLabel();
+    coverLabel->setFixedHeight(360);
+    coverLabel->setAlignment(Qt::AlignCenter);
     coverLabel->setStyleSheet(R"(
-
         QLabel {
-            background-color: #EEF2FF;
-            color: #4F46E5;
-            border-radius: 14px;
-            font-size: 60px;
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #4F46E5, stop:1 #7C3AED);
+            border-radius: 12px;
+            color: white;
+            font-size: 28px;
             font-weight: 900;
         }
-
     )");
-
-    cardLayout->addWidget(
-        coverLabel
-        );
-
-
-    // =====================================================
-    // RIGHT DETAILS
-    // =====================================================
-
-    QWidget *details =
-        new QWidget();
-
-
-    QVBoxLayout *detailsLayout =
-        new QVBoxLayout(details);
-
-    detailsLayout->setContentsMargins(
-        0,
-        0,
-        0,
-        0
-        );
-
-    detailsLayout->setSpacing(12);
-
-
-    // =====================================================
-    // TITLE
-    // =====================================================
-
-    titleLabel =
-        new QLabel(
-            "Book Title"
-            );
-
-    titleLabel->setWordWrap(
-        true
-        );
-
-    titleLabel->setStyleSheet(R"(
-
-        QLabel {
-            color: #172033;
-            font-size: 30px;
-            font-weight: 900;
-        }
-
-    )");
-
-    detailsLayout->addWidget(
-        titleLabel
-        );
-
-
-    // =====================================================
-    // AUTHOR
-    // =====================================================
-
-    authorLabel =
-        new QLabel(
-            "by Author"
-            );
-
-    authorLabel->setStyleSheet(R"(
-
-        QLabel {
-            color: #6B7280;
-            font-size: 15px;
-            font-weight: 600;
-        }
-
-    )");
-
-    detailsLayout->addWidget(
-        authorLabel
-        );
-
-
-    detailsLayout->addSpacing(
-        8
-        );
-
-
-    // =====================================================
-    // PRICE
-    // =====================================================
-
-    priceLabel =
-        new QLabel(
-            "₹0"
-            );
-
-    priceLabel->setStyleSheet(R"(
-
-        QLabel {
-            color: #111827;
-            font-size: 30px;
-            font-weight: 900;
-        }
-
-    )");
-
-    detailsLayout->addWidget(
-        priceLabel
-        );
-
-
-    // =====================================================
-    // CONDITION
-    // =====================================================
-
-    conditionLabel =
-        new QLabel(
-            "Condition"
-            );
-
-    conditionLabel->setMaximumWidth(
-        160
-        );
-
-    conditionLabel->setAlignment(
-        Qt::AlignCenter
-        );
-
-    conditionLabel->setStyleSheet(R"(
-
-        QLabel {
-            background-color: #ECFDF5;
-            color: #047857;
-            border-radius: 7px;
-            padding: 7px 12px;
-            font-size: 11px;
-            font-weight: 800;
-        }
-
-    )");
-
-    detailsLayout->addWidget(
-        conditionLabel,
-        0,
-        Qt::AlignLeft
-        );
-
-
-    // =====================================================
-    // INFORMATION GRID
-    // =====================================================
-
-    QGridLayout *infoGrid =
-        new QGridLayout();
-
-    infoGrid->setHorizontalSpacing(
-        25
-        );
-
-    infoGrid->setVerticalSpacing(
-        10
-        );
-
-
-    categoryLabel =
-        new QLabel();
-
-    isbnLabel =
-        new QLabel();
-
-    locationLabel =
-        new QLabel();
-
-    sellerLabel =
-        new QLabel();
-
-
-    categoryLabel->setStyleSheet(
-        "color:#374151;font-size:12px;"
-        );
-
-    isbnLabel->setStyleSheet(
-        "color:#374151;font-size:12px;"
-        );
-
-    locationLabel->setStyleSheet(
-        "color:#374151;font-size:12px;"
-        );
-
-    sellerLabel->setStyleSheet(
-        "color:#374151;font-size:12px;"
-        );
-
-
-    infoGrid->addWidget(
-        new QLabel("<b>Category</b>"),
-        0,
-        0
-        );
-
-    infoGrid->addWidget(
-        categoryLabel,
-        0,
-        1
-        );
-
-
-    infoGrid->addWidget(
-        new QLabel("<b>ISBN</b>"),
-        1,
-        0
-        );
-
-    infoGrid->addWidget(
-        isbnLabel,
-        1,
-        1
-        );
-
-
-    infoGrid->addWidget(
-        new QLabel("<b>Location</b>"),
-        2,
-        0
-        );
-
-    infoGrid->addWidget(
-        locationLabel,
-        2,
-        1
-        );
-
-
-    infoGrid->addWidget(
-        new QLabel("<b>Seller</b>"),
-        3,
-        0
-        );
-
-    infoGrid->addWidget(
-        sellerLabel,
-        3,
-        1
-        );
-
-
-    detailsLayout->addLayout(
-        infoGrid
-        );
-
-
-    detailsLayout->addSpacing(
-        10
-        );
-
-
-    // =====================================================
-    // DESCRIPTION
-    // =====================================================
-
-    QLabel *descriptionHeading =
-        new QLabel(
-            "Description"
-            );
-
-    descriptionHeading->setStyleSheet(R"(
-
-        QLabel {
-            color: #172033;
-            font-size: 15px;
-            font-weight: 800;
-        }
-
-    )");
-
-    detailsLayout->addWidget(
-        descriptionHeading
-        );
-
-
-    descriptionLabel =
-        new QLabel(
-            "No description available."
-            );
-
-    descriptionLabel->setWordWrap(
-        true
-        );
-
-    descriptionLabel->setMinimumHeight(
-        60
-        );
-
-    descriptionLabel->setStyleSheet(R"(
-
-        QLabel {
-            color: #6B7280;
-            font-size: 12px;
-        }
-
-    )");
-
-    detailsLayout->addWidget(
-        descriptionLabel
-        );
-
-
-    detailsLayout->addStretch();
-
-
-    // =====================================================
-    // ORDER BUTTON
-    // =====================================================
-
-    orderButton =
-        new QPushButton(
-            "Buy / Place Order"
-            );
-
-    orderButton->setMinimumHeight(
-        48
-        );
-
-    orderButton->setMaximumWidth(
-        250
-        );
-
+    leftLayout->addWidget(coverLabel);
+
+    orderButton = new QPushButton("Add to Cart");
+    orderButton->setMinimumHeight(48);
+    orderButton->setCursor(Qt::PointingHandCursor);
     orderButton->setStyleSheet(R"(
-
         QPushButton {
-            background-color: #5B5FEF;
+            background-color: #4F46E5;
             color: white;
             border: none;
             border-radius: 10px;
-            padding: 0 25px;
-            font-size: 13px;
+            font-size: 15px;
             font-weight: 800;
         }
-
         QPushButton:hover {
-            background-color: #4F46E5;
-        }
-
-        QPushButton:pressed {
             background-color: #4338CA;
         }
-
         QPushButton:disabled {
-            background-color: #D1D5DB;
-            color: #6B7280;
+            background-color: #9CA3AF;
+            color: #E5E7EB;
         }
+    )");
+    leftLayout->addWidget(orderButton);
 
+    exchangeButton = new QPushButton(QStringLiteral("⇄ Propose Exchange"));
+    exchangeButton->setMinimumHeight(44);
+    exchangeButton->setCursor(Qt::PointingHandCursor);
+    exchangeButton->setStyleSheet(R"(
+        QPushButton {
+            background-color: white;
+            color: #4F46E5;
+            border: 2px solid #4F46E5;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 800;
+        }
+        QPushButton:hover {
+            background-color: #EEF2FF;
+        }
+        QPushButton:disabled {
+            border-color: #D1D5DB;
+            color: #9CA3AF;
+        }
+    )");
+    leftLayout->addWidget(exchangeButton);
+    leftLayout->addStretch();
+
+    connect(orderButton, &QPushButton::clicked, this, &BookDetailsWindow::handleOrder);
+    connect(exchangeButton, &QPushButton::clicked, this, &BookDetailsWindow::handleProposeExchange);
+
+    // Right Column: Metadata & Description
+    QFrame *rightCard = new QFrame();
+    rightCard->setStyleSheet(R"(
+        QFrame {
+            background-color: white;
+            border: 1px solid #E5E7EB;
+            border-radius: 16px;
+        }
     )");
 
+    QVBoxLayout *rightLayout = new QVBoxLayout(rightCard);
+    rightLayout->setContentsMargins(28, 25, 28, 25);
+    rightLayout->setSpacing(16);
 
-    detailsLayout->addWidget(
-        orderButton,
-        0,
-        Qt::AlignLeft
-        );
+    titleLabel = new QLabel("Loading book...");
+    titleLabel->setWordWrap(true);
+    titleLabel->setStyleSheet("color: #111827; font-size: 24px; font-weight: 800;");
+    rightLayout->addWidget(titleLabel);
 
+    authorLabel = new QLabel("by ...");
+    authorLabel->setStyleSheet("color: #6B7280; font-size: 14px; font-weight: 600;");
+    rightLayout->addWidget(authorLabel);
 
-    connect(
-        orderButton,
-        &QPushButton::clicked,
-        this,
-        &BookDetailsWindow::handleOrder
-        );
+    QHBoxLayout *priceRatingRow = new QHBoxLayout();
+    priceLabel = new QLabel("₹0");
+    priceLabel->setStyleSheet("color: #4F46E5; font-size: 26px; font-weight: 900;");
+    priceRatingRow->addWidget(priceLabel);
+    priceRatingRow->addSpacing(20);
 
+    ratingLabel = new QLabel("★ 0.0 (0 reviews)");
+    ratingLabel->setStyleSheet("color: #D97706; font-size: 15px; font-weight: 700;");
+    priceRatingRow->addWidget(ratingLabel);
+    priceRatingRow->addStretch();
+    rightLayout->addLayout(priceRatingRow);
 
-    cardLayout->addWidget(
-        details,
-        1
-        );
+    QFrame *divider = new QFrame();
+    divider->setFrameShape(QFrame::HLine);
+    divider->setStyleSheet("color: #E5E7EB;");
+    rightLayout->addWidget(divider);
 
+    // Grid of metadata cards
+    QGridLayout *grid = new QGridLayout();
+    grid->setSpacing(12);
 
-    mainLayout->addWidget(
-        mainCard
-        );
+    conditionLabel = new QLabel("-");
+    categoryLabel = new QLabel("-");
+    isbnLabel = new QLabel("-");
+    sellerLabel = new QLabel("-");
 
+    grid->addWidget(createInfoCard("Condition", conditionLabel->text()), 0, 0);
+    grid->addWidget(createInfoCard("Category", categoryLabel->text()), 0, 1);
+    grid->addWidget(createInfoCard("ISBN", isbnLabel->text()), 1, 0);
+    grid->addWidget(createInfoCard("Listed By", sellerLabel->text()), 1, 1);
 
-    return section;
+    rightLayout->addLayout(grid);
+
+    QLabel *descHeader = new QLabel("About this book");
+    descHeader->setStyleSheet("color: #172033; font-size: 16px; font-weight: 800; margin-top: 10px;");
+    rightLayout->addWidget(descHeader);
+
+    descriptionLabel = new QLabel("No description provided.");
+    descriptionLabel->setWordWrap(true);
+    descriptionLabel->setStyleSheet("color: #4B5563; font-size: 13px; line-height: 1.5;");
+    rightLayout->addWidget(descriptionLabel);
+    rightLayout->addStretch();
+
+    mainLayout->addWidget(leftCard);
+    mainLayout->addWidget(rightCard, 1);
+
+    return container;
 }
 
-
-// =========================================================
-// INFO CARD
-// =========================================================
-
-QFrame* BookDetailsWindow::createInfoCard(
-    const QString &label,
-    const QString &value
-    )
+QFrame* BookDetailsWindow::createInfoCard(const QString &label, const QString &value)
 {
-    QFrame *card =
-        new QFrame();
-
+    QFrame *card = new QFrame();
     card->setStyleSheet(R"(
-
         QFrame {
-            background-color: #F8F9FC;
+            background-color: #F9FAFB;
             border: 1px solid #E5E7EB;
             border-radius: 10px;
+            padding: 8px 12px;
         }
-
     )");
 
+    QVBoxLayout *layout = new QVBoxLayout(card);
+    layout->setContentsMargins(10, 8, 10, 8);
+    layout->setSpacing(3);
 
-    QVBoxLayout *layout =
-        new QVBoxLayout(card);
+    QLabel *lbl = new QLabel(label.toUpper());
+    lbl->setStyleSheet("color: #9CA3AF; font-size: 10px; font-weight: 800;");
+    layout->addWidget(lbl);
 
-    layout->setContentsMargins(
-        12,
-        10,
-        12,
-        10
-        );
-
-
-    QLabel *labelWidget =
-        new QLabel(label);
-
-    labelWidget->setStyleSheet(
-        "color:#6B7280;font-size:10px;font-weight:700;"
-        );
-
-
-    QLabel *valueWidget =
-        new QLabel(value);
-
-    valueWidget->setWordWrap(
-        true
-        );
-
-    valueWidget->setStyleSheet(
-        "color:#172033;font-size:12px;font-weight:700;"
-        );
-
-
-    layout->addWidget(
-        labelWidget
-        );
-
-    layout->addWidget(
-        valueWidget
-        );
-
+    QLabel *val = new QLabel(value);
+    val->setObjectName("infoValue");
+    val->setStyleSheet("color: #1F2937; font-size: 13px; font-weight: 700;");
+    layout->addWidget(val);
 
     return card;
 }
 
+// =========================================================
+// REVIEWS SECTION
+// =========================================================
+
+QWidget* BookDetailsWindow::createReviewsSection()
+{
+    QWidget *container = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(container);
+    layout->setContentsMargins(32, 10, 32, 0);
+    layout->setSpacing(15);
+
+    QLabel *header = new QLabel("Reader Reviews");
+    header->setStyleSheet("color: #111827; font-size: 20px; font-weight: 800;");
+    layout->addWidget(header);
+
+    QFrame *card = new QFrame();
+    card->setStyleSheet("background-color: white; border: 1px solid #E5E7EB; border-radius: 16px;");
+    reviewsLayout = new QVBoxLayout(card);
+    reviewsLayout->setContentsMargins(20, 20, 20, 20);
+    reviewsLayout->setSpacing(12);
+
+    QLabel *empty = new QLabel("Loading reviews...");
+    empty->setStyleSheet("color: #9CA3AF; font-size: 13px;");
+    reviewsLayout->addWidget(empty);
+
+    layout->addWidget(card);
+    return container;
+}
 
 // =========================================================
 // LOAD BOOK
 // =========================================================
 
-bool BookDetailsWindow::loadBook()
+void BookDetailsWindow::loadBook()
 {
-    ::Book databaseBook =
-        Database::instance().getBookById(
-            bookId
-            );
+    auto *reply = ApiClient::instance().getPublic(QStringLiteral("/api/books/") + bookId);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
+        reply->deleteLater();
 
-
-    if (databaseBook.id == -1)
-    {
-        QMessageBox::critical(
-            this,
-            "Book Not Found",
-            "The selected book could not be found."
-            );
-
-        if (orderButton)
-        {
-            orderButton->setDisabled(
-                true
-                );
+        if (!ok || !json.contains(QStringLiteral("book"))) {
+            QMessageBox::critical(this, "Book Not Found", errorMsg.isEmpty() ? "The selected book could not be found." : errorMsg);
+            if (orderButton) orderButton->setEnabled(false);
+            return;
         }
 
-        return false;
-    }
+        book = BookModel::fromJson(json[QStringLiteral("book")].toObject());
 
+        titleLabel->setText(book.title.isEmpty() ? "Untitled Book" : book.title);
+        authorLabel->setText(book.author.isEmpty() ? "by Unknown Author" : "by " + book.author);
+        priceLabel->setText(QString("₹%1").arg(book.price, 0, 'f', 0));
+        conditionLabel->setText(book.condition.isEmpty() ? "Not specified" : book.condition);
+        categoryLabel->setText(book.category.isEmpty() ? "Not specified" : book.category);
+        isbnLabel->setText(book.isbn.isEmpty() ? "Not specified" : book.isbn);
+        sellerLabel->setText(book.owner.username.isEmpty() ? "Unknown" : book.owner.username);
+        descriptionLabel->setText(book.description.isEmpty() ? "No description available." : book.description);
 
-    // =====================================================
-    // COPY DATABASE DATA
-    // =====================================================
-
-    book.id =
-        databaseBook.id;
-
-    book.title =
-        databaseBook.title;
-
-    book.author =
-        databaseBook.author;
-
-    book.isbn =
-        databaseBook.isbn;
-
-    book.category =
-        databaseBook.category;
-
-    book.condition =
-        databaseBook.condition;
-
-    book.price =
-        databaseBook.price;
-
-    book.description =
-        databaseBook.description;
-
-    book.location =
-        databaseBook.location;
-
-    book.imagePath =
-        databaseBook.imagePath;
-
-    book.sellerName =
-        databaseBook.sellerName;
-
-    book.createdAt =
-        databaseBook.createdAt;
-
-
-    // =====================================================
-    // DISPLAY TITLE
-    // =====================================================
-
-    titleLabel->setText(
-        book.title.isEmpty()
-            ? "Untitled Book"
-            : book.title
-        );
-
-
-    // =====================================================
-    // AUTHOR
-    // =====================================================
-
-    authorLabel->setText(
-        book.author.isEmpty()
-            ? "by Unknown Author"
-            : "by " + book.author
-        );
-
-
-    // =====================================================
-    // PRICE
-    // =====================================================
-
-    priceLabel->setText(
-        QString("₹%1")
-            .arg(
-                book.price,
-                0,
-                'f',
-                0
-                )
-        );
-
-
-    // =====================================================
-    // CONDITION
-    // =====================================================
-
-    conditionLabel->setText(
-        book.condition.isEmpty()
-            ? "Not specified"
-            : book.condition
-        );
-
-
-    // =====================================================
-    // CATEGORY
-    // =====================================================
-
-    categoryLabel->setText(
-        book.category.isEmpty()
-            ? "Not specified"
-            : book.category
-        );
-
-
-    // =====================================================
-    // ISBN
-    // =====================================================
-
-    isbnLabel->setText(
-        book.isbn.isEmpty()
-            ? "Not specified"
-            : book.isbn
-        );
-
-
-    // =====================================================
-    // LOCATION
-    // =====================================================
-
-    locationLabel->setText(
-        book.location.isEmpty()
-            ? "Not specified"
-            : book.location
-        );
-
-
-    // =====================================================
-    // SELLER
-    // =====================================================
-
-    sellerLabel->setText(
-        book.sellerName.isEmpty()
-            ? "Unknown"
-            : book.sellerName
-        );
-
-
-    // =====================================================
-    // DESCRIPTION
-    // =====================================================
-
-    descriptionLabel->setText(
-        book.description.isEmpty()
-            ? "No description available."
-            : book.description
-        );
-
-
-    // =====================================================
-    // COVER IMAGE
-    // =====================================================
-
-    coverLabel->clear();
-
-    if (!book.imagePath.trimmed().isEmpty())
-    {
-        QPixmap pixmap(
-            book.imagePath
-            );
-
-
-        if (!pixmap.isNull())
-        {
-            coverLabel->setPixmap(
-                pixmap.scaled(
-                    coverLabel->size(),
-                    Qt::KeepAspectRatio,
-                    Qt::SmoothTransformation
-                    )
-                );
+        QString stars;
+        for (int i = 0; i < 5; ++i) {
+            stars += (i < static_cast<int>(book.averageRating + 0.5)) ? "★" : "☆";
         }
-        else
-        {
-            coverLabel->setText(
-                book.title.left(2).toUpper()
-                );
-        }
-    }
-    else
-    {
-        QString initials =
-            book.title.left(2).toUpper();
+        ratingLabel->setText(QString("%1 %2 (%3 review%4)")
+                                 .arg(stars)
+                                 .arg(book.averageRating, 0, 'f', 1)
+                                 .arg(book.reviewCount)
+                                 .arg(book.reviewCount == 1 ? "" : "s"));
 
-        if (initials.isEmpty())
-        {
-            initials = "BK";
+        // Update info cards
+        auto cards = findChildren<QFrame*>();
+        for (auto *c : cards) {
+            auto labels = c->findChildren<QLabel*>();
+            if (labels.size() >= 2) {
+                QString title = labels[0]->text();
+                if (title == "CONDITION") labels[1]->setText(book.condition);
+                else if (title == "CATEGORY") labels[1]->setText(book.category);
+                else if (title == "ISBN") labels[1]->setText(book.isbn.isEmpty() ? "N/A" : book.isbn);
+                else if (title == "LISTED BY") labels[1]->setText(book.owner.username);
+            }
         }
 
-        coverLabel->setText(
-            initials
-            );
-    }
+        // Check if user owns this book
+        const QString currentUserId = SessionManager::instance().userId();
+        if (!currentUserId.isEmpty() && book.owner.id == currentUserId) {
+            orderButton->setText("Your Listing");
+            orderButton->setEnabled(false);
+            if (exchangeButton) {
+                exchangeButton->setEnabled(false);
+                exchangeButton->setVisible(false);
+            }
+        } else {
+            orderButton->setText("Add to Cart");
+            orderButton->setEnabled(true);
+            if (exchangeButton) {
+                exchangeButton->setEnabled(true);
+                exchangeButton->setVisible(true);
+            }
+        }
 
+        // Render Cover Image
+        if (!book.coverImage.trimmed().isEmpty()) {
+            QFileInfo fi(book.coverImage);
+            if (fi.exists() && fi.isFile()) {
+                QPixmap p(book.coverImage);
+                if (!p.isNull()) {
+                    coverLabel->setPixmap(p.scaled(coverLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                    return;
+                }
+            }
+        }
 
-    // =====================================================
-    // OWN BOOK CHECK
-    // =====================================================
-
-    if (!userName.trimmed().isEmpty() &&
-        book.sellerName.compare(
-            userName,
-            Qt::CaseInsensitive
-            ) == 0)
-    {
-        orderButton->setText(
-            "Your Book"
-            );
-
-        orderButton->setDisabled(
-            true
-            );
-    }
-
-
-    return true;
+        // Fallback: procedural initial/title cover
+        QString initials = book.title.left(2).toUpper();
+        if (initials.isEmpty()) initials = "BB";
+        coverLabel->setText(initials);
+    });
 }
 
+// =========================================================
+// LOAD REVIEWS
+// =========================================================
+
+void BookDetailsWindow::loadReviews()
+{
+    auto *reply = ApiClient::instance().getPublic(QStringLiteral("/api/books/") + bookId + QStringLiteral("/reviews"));
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
+        reply->deleteLater();
+
+        if (!reviewsLayout) return;
+
+        // Clear existing reviews layout items
+        QLayoutItem *child;
+        while ((child = reviewsLayout->takeAt(0)) != nullptr) {
+            delete child->widget();
+            delete child;
+        }
+
+        if (!ok || !json.contains(QStringLiteral("reviews"))) {
+            QLabel *lbl = new QLabel("Unable to load reviews.");
+            lbl->setStyleSheet("color: #9CA3AF; font-size: 13px;");
+            reviewsLayout->addWidget(lbl);
+            return;
+        }
+
+        const auto arr = json[QStringLiteral("reviews")].toArray();
+        if (arr.isEmpty()) {
+            QLabel *lbl = new QLabel("No reviews yet. Be the first to review this book!");
+            lbl->setStyleSheet("color: #6B7280; font-size: 13px; font-style: italic;");
+            reviewsLayout->addWidget(lbl);
+            return;
+        }
+
+        for (const auto &v : arr) {
+            const auto rev = ReviewModel::fromJson(v.toObject());
+            QFrame *item = new QFrame();
+            item->setStyleSheet("background-color: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 10px; padding: 10px;");
+            QVBoxLayout *iLayout = new QVBoxLayout(item);
+            iLayout->setSpacing(4);
+
+            QHBoxLayout *top = new QHBoxLayout();
+            QString stars;
+            for (int s = 0; s < 5; ++s) {
+                stars += (s < rev.rating) ? "★" : "☆";
+            }
+            QLabel *starLabel = new QLabel(stars);
+            starLabel->setStyleSheet("color: #D97706; font-size: 14px; font-weight: 800;");
+
+            QLabel *userLabel = new QLabel("by " + rev.reviewerUsername);
+            userLabel->setStyleSheet("color: #374151; font-size: 12px; font-weight: 700;");
+
+            QLabel *dateLabel = new QLabel(rev.createdAt.toString("MMM d, yyyy"));
+            dateLabel->setStyleSheet("color: #9CA3AF; font-size: 11px;");
+
+            top->addWidget(starLabel);
+            top->addWidget(userLabel);
+            top->addStretch();
+            top->addWidget(dateLabel);
+            iLayout->addLayout(top);
+
+            QLabel *comment = new QLabel(rev.comment);
+            comment->setWordWrap(true);
+            comment->setStyleSheet("color: #4B5563; font-size: 13px;");
+            iLayout->addWidget(comment);
+
+            reviewsLayout->addWidget(item);
+        }
+    });
+}
 
 // =========================================================
-// ORDER
+// ORDER / ADD TO CART
 // =========================================================
 
 void BookDetailsWindow::handleOrder()
 {
-    // =====================================================
-    // INVALID BOOK
-    // =====================================================
-
-    if (book.id == -1)
-    {
-        QMessageBox::warning(
-            this,
-            "Error",
-            "Invalid book."
-            );
-
+    if (!SessionManager::instance().isLoggedIn()) {
+        QMessageBox::warning(this, "Login Required", "Please log in before adding items to your cart.");
         return;
     }
 
-
-    // =====================================================
-    // LOGIN CHECK
-    // =====================================================
-
-    if (userName.trimmed().isEmpty())
-    {
-        QMessageBox::warning(
-            this,
-            "Login Required",
-            "Please login before placing an order."
-            );
-
+    if (book.owner.id == SessionManager::instance().userId()) {
+        QMessageBox::warning(this, "Cannot Buy", "You cannot buy your own book.");
         return;
     }
 
+    orderButton->setEnabled(false);
+    orderButton->setText("Adding to Cart...");
 
-    // =====================================================
-    // OWN BOOK CHECK
-    // =====================================================
+    QJsonObject body;
+    body[QStringLiteral("bookId")] = book.id;
 
-    if (book.sellerName.compare(
-            userName,
-            Qt::CaseInsensitive
-            ) == 0)
-    {
-        QMessageBox::warning(
-            this,
-            "Cannot Buy",
-            "You cannot buy your own book."
-            );
+    auto *reply = ApiClient::instance().post(QStringLiteral("/api/cart/items"), body, true);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
+        reply->deleteLater();
 
-        return;
-    }
-
-
-    // =====================================================
-    // CONFIRM ORDER
-    // =====================================================
-
-    QMessageBox::StandardButton reply =
-        QMessageBox::question(
-            this,
-            "Confirm Order",
-
-            "Do you want to place an order for:\n\n"
-                + book.title
-                + "\n\nPrice: ₹"
-                + QString::number(
-                    book.price,
-                    'f',
-                    0
-                    ),
-
-            QMessageBox::Yes |
-                QMessageBox::No
-            );
-
-
-    if (reply != QMessageBox::Yes)
-    {
-        return;
-    }
-
-
-    // =====================================================
-    // CREATE ORDER
-    // =====================================================
-
-    bool success =
-        Database::instance().createOrder(
-            book.id,
-            userName
-            );
-
-
-    if (!success)
-    {
-        QMessageBox::warning(
-            this,
-            "Order Failed",
-
-            "Unable to place the order.\n\n"
-            "The book may have already been sold "
-            "or is no longer available."
-            );
-
-        return;
-    }
-
-
-    // =====================================================
-    // SUCCESS
-    // =====================================================
-
-    QMessageBox::information(
-        this,
-        "Order Successful",
-        "Your order has been placed successfully!"
-        );
-
-
-    orderButton->setDisabled(
-        true
-        );
-
-    orderButton->setText(
-        "Order Placed"
-        );
-
-
-    emit orderPlaced();
+        if (ok) {
+            orderButton->setText("In Cart");
+            QMessageBox::information(this, "Cart", "Book has been added to your shopping cart!");
+            emit addToCartRequested(book.id);
+        } else {
+            orderButton->setEnabled(true);
+            orderButton->setText("Add to Cart");
+            QMessageBox::warning(this, "Cart Error", errorMsg.isEmpty() ? "Unable to add book to cart." : errorMsg);
+        }
+    });
 }
 
+void BookDetailsWindow::handleProposeExchange()
+{
+    if (!SessionManager::instance().isLoggedIn()) {
+        QMessageBox::warning(this, "Login Required", "Please log in before proposing an exchange.");
+        return;
+    }
 
-// =========================================================
-// BACK
-// =========================================================
+    if (book.owner.id == SessionManager::instance().userId()) {
+        QMessageBox::warning(this, "Cannot Exchange", "You cannot exchange with your own book.");
+        return;
+    }
+
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("status"), QStringLiteral("available"));
+    auto *reply = ApiClient::instance().get(QStringLiteral("/api/books/my"), query);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
+        reply->deleteLater();
+
+        if (!ok) {
+            QMessageBox::warning(this, "Error", errorMsg.isEmpty() ? "Unable to load your listings." : errorMsg);
+            return;
+        }
+
+        auto arr = json[QStringLiteral("books")].toArray();
+        if (arr.isEmpty()) {
+            QMessageBox::information(this, "No Available Books",
+                                     "You don't have any available books in your listings to offer for an exchange. Please list a book first!");
+            return;
+        }
+
+        QDialog dialog(this);
+        dialog.setWindowTitle("Propose Book Exchange");
+        dialog.resize(460, 340);
+        dialog.setStyleSheet("background-color: white; font-family: 'Segoe UI', Arial, sans-serif;");
+
+        auto *layout = new QVBoxLayout(&dialog);
+        layout->setContentsMargins(24, 20, 24, 20);
+        layout->setSpacing(14);
+
+        auto *headLbl = new QLabel(QString("Exchange for '%1'").arg(book.title), &dialog);
+        headLbl->setStyleSheet("font-size: 16px; font-weight: 800; color: #0F172A;");
+        layout->addWidget(headLbl);
+
+        auto *selectLbl = new QLabel("Select your book to offer in exchange:", &dialog);
+        selectLbl->setStyleSheet("font-size: 13px; font-weight: 600; color: #475569;");
+        layout->addWidget(selectLbl);
+
+        auto *combo = new QComboBox(&dialog);
+        combo->setStyleSheet("background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 8px; padding: 8px; font-size: 13px;");
+        for (const auto &val : arr) {
+            auto bObj = val.toObject();
+            QString bId = bObj["id"].toString();
+            QString bTitle = bObj["title"].toString();
+            QString bCond = bObj["condition"].toString();
+            combo->addItem(QString("%1 (%2)").arg(bTitle, bCond), bId);
+        }
+        layout->addWidget(combo);
+
+        auto *msgLbl = new QLabel("Optional message to book owner:", &dialog);
+        msgLbl->setStyleSheet("font-size: 13px; font-weight: 600; color: #475569;");
+        layout->addWidget(msgLbl);
+
+        auto *msgEdit = new QTextEdit(&dialog);
+        msgEdit->setPlaceholderText("e.g. Hello, I would love to trade my book with yours!");
+        msgEdit->setStyleSheet("background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 8px; padding: 8px;");
+        layout->addWidget(msgEdit);
+
+        auto *btnRow = new QHBoxLayout();
+        btnRow->addStretch();
+        auto *cancelBtn = new QPushButton("Cancel", &dialog);
+        cancelBtn->setStyleSheet("padding: 8px 16px; border-radius: 6px; font-weight: 600; background: #F1F5F9; color: #334155;");
+        connect(cancelBtn, &QPushButton::clicked, &dialog, &QDialog::reject);
+        btnRow->addWidget(cancelBtn);
+
+        auto *sendBtn = new QPushButton("Send Proposal", &dialog);
+        sendBtn->setStyleSheet("padding: 8px 16px; border-radius: 6px; font-weight: 700; background: #4F46E5; color: white;");
+        btnRow->addWidget(sendBtn);
+        layout->addLayout(btnRow);
+
+        connect(sendBtn, &QPushButton::clicked, [&dialog, combo, msgEdit, this]() {
+            QString offeredBookId = combo->currentData().toString();
+            QString message = msgEdit->toPlainText().trimmed();
+
+            QJsonObject payload;
+            payload["requestedBookId"] = book.id;
+            payload["offeredBookId"] = offeredBookId;
+            if (!message.isEmpty()) {
+                payload["message"] = message;
+            }
+
+            auto *exReply = ApiClient::instance().post(QStringLiteral("/api/exchanges"), payload, true);
+            connect(exReply, &QNetworkReply::finished, [exReply, &dialog, this]() {
+                auto [exOk, exJson, exError] = ApiClient::parseReply(exReply);
+                exReply->deleteLater();
+
+                if (exOk) {
+                    QMessageBox::information(this, "Proposal Sent", "Your exchange proposal has been sent to the book owner!");
+                    dialog.accept();
+                } else {
+                    QMessageBox::warning(&dialog, "Exchange Error", exError.isEmpty() ? "Failed to send exchange proposal." : exError);
+                }
+            });
+        });
+
+        dialog.exec();
+    });
+}
 
 void BookDetailsWindow::handleBack()
 {

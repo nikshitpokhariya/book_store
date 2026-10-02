@@ -7,7 +7,7 @@
     ],
 
     "app": {
-        "threads_num": 4,
+        "threads_num": 1,
         "enable_session": false,
         "document_root": "./public"
     },

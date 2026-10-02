@@ -1,5 +1,8 @@
 #include "sellwindow.h"
 #include "database.h"
+#include "network/ApiClient.h"
+#include <QJsonObject>
+#include <QNetworkReply>
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -1267,24 +1270,32 @@ QString SellWindow::copyImageToAppFolder(
         extension;
 
 
-    QString destinationPath =
-        imagesPath +
-        "/" +
-        fileName;
+    QString destinationPath = imagesPath + "/" + fileName;
 
+    QString destinationDir;
+    QStringList candidates = {
+        "d:/1Hello-World/1pbl-oops/backend/public/uploads",
+        QDir::currentPath() + "/../backend/public/uploads",
+        QDir::currentPath() + "/../../backend/public/uploads"
+    };
+    for (const auto &c : candidates) {
+        if (QDir(c).exists()) {
+            destinationDir = QDir(c).canonicalPath();
+            break;
+        }
+    }
 
-    // =====================================================
-    // COPY
-    // =====================================================
+    if (!destinationDir.isEmpty()) {
+        QString destFile = destinationDir + "/" + fileName;
+        if (QFile::copy(sourcePath, destFile)) {
+            return QStringLiteral("http://localhost:8080/uploads/") + fileName;
+        }
+    }
 
-    if (!QFile::copy(
-            sourcePath,
-            destinationPath
-            ))
+    if (!QFile::copy(sourcePath, destinationPath))
     {
         return QString();
     }
-
 
     return destinationPath;
 }
@@ -1427,64 +1438,51 @@ void SellWindow::sellBook()
 
 
     // =====================================================
-    // DATABASE
+    // POST TO BACKEND API
     // =====================================================
 
-    bool success =
-        Database::instance().addBook(
-            sellerName,
-            title,
-            author,
-            isbn,
-            category,
-            condition,
-            price,
-            description,
-            location,
-            storedImagePath
+    sellButton->setEnabled(false);
+    sellButton->setText("Publishing...");
+
+    QJsonObject body;
+    body[QStringLiteral("title")] = title;
+    body[QStringLiteral("author")] = author;
+    body[QStringLiteral("price")] = price;
+    body[QStringLiteral("condition")] = condition;
+    body[QStringLiteral("category")] = category;
+    body[QStringLiteral("isbn")] = isbn;
+    body[QStringLiteral("description")] = description;
+    body[QStringLiteral("coverImage")] = storedImagePath;
+
+    auto *reply = ApiClient::instance().post(QStringLiteral("/api/books"), body, true);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, storedImagePath]() {
+        auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
+        reply->deleteLater();
+
+        sellButton->setEnabled(true);
+        sellButton->setText("Publish Book");
+
+        if (ok) {
+            QMessageBox::information(
+                this,
+                "Book Published",
+                "Your book has been successfully listed on BookBazzar!"
             );
 
+            emit bookAdded();
+            emit backRequested();
+        } else {
+            if (!storedImagePath.isEmpty() && !storedImagePath.startsWith("http")) {
+                QFile::remove(storedImagePath);
+            }
 
-    // =====================================================
-    // DATABASE ERROR
-    // =====================================================
-
-    if (!success)
-    {
-        if (!storedImagePath.isEmpty())
-        {
-            QFile::remove(
-                storedImagePath
-                );
+            QMessageBox::critical(
+                this,
+                "Unable to Publish",
+                errorMsg.isEmpty() ? "The book could not be added to the marketplace." : errorMsg
+            );
         }
-
-
-        QMessageBox::critical(
-            this,
-            "Unable to Publish",
-            "The book could not be added to the marketplace.\n\n"
-            "Please check your information and try again."
-            );
-
-        return;
-    }
-
-
-    // =====================================================
-    // SUCCESS
-    // =====================================================
-
-    QMessageBox::information(
-        this,
-        "Book Published",
-        "Your book has been successfully listed on "
-        "BookBazzar!"
-        );
-
-
-    emit bookAdded();
-
-    emit backRequested();
+    });
 }
 
 

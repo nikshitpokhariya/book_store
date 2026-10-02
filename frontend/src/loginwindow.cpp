@@ -1,10 +1,20 @@
 #include "loginwindow.h"
 
-#include "database.h"
 #include "signupwindow.h"
 #include "homewindow.h"
 #include "browsewindow.h"
+#include "bookdetailswindow.h"
 #include "sellwindow.h"
+#include "listingswindow.h"
+#include "orderswindow.h"
+#include "windows/CartWindow.h"
+#include "windows/CheckoutWindow.h"
+#include "windows/OrderDetailWindow.h"
+#include "windows/ExchangeWindow.h"
+#include "network/ApiClient.h"
+#include "auth/SessionManager.h"
+#include <QJsonObject>
+#include <QNetworkReply>
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -571,211 +581,345 @@ void LoginWindow::handleLogin()
     }
 
 
-    // =====================================================
-    // DATABASE LOGIN
-    // =====================================================
+    loginButton->setEnabled(false);
+    loginButton->setText("Signing In...");
 
-    Database &database =
-        Database::instance();
+    QJsonObject body;
+    body[QStringLiteral("email")] = email;
+    body[QStringLiteral("password")] = password;
 
-    bool success =
-        database.loginUser(
-            email,
-            password
-            );
-
-
-    // =====================================================
-    // LOGIN SUCCESS
-    // =====================================================
-
-    if (success)
+    auto *reply = ApiClient::instance().post(QStringLiteral("/api/auth/login"), body, false);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]()
     {
-        QString userName =
-            database.getUserName(email);
+        auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
+        reply->deleteLater();
 
+        loginButton->setEnabled(true);
+        loginButton->setText("Sign In");
 
-        // =================================================
-        // CREATE HOME WINDOW
-        // =================================================
+        if (ok)
+        {
+            const QString token = json[QStringLiteral("accessToken")].toString();
+            const qint64 expiresIn = json.value(QStringLiteral("expiresIn")).toInteger(900);
+            const QJsonObject userObj = json[QStringLiteral("user")].toObject();
+            const QString userId = userObj[QStringLiteral("id")].toString();
+            const QString userName = userObj[QStringLiteral("username")].toString();
 
-        HomeWindow *homeWindow =
-            new HomeWindow(
-                userName
+            SessionManager::instance().setSession(token, expiresIn, userId, userName);
+
+            // =================================================
+            // CREATE HOME WINDOW
+            // =================================================
+
+            HomeWindow *homeWindow =
+                new HomeWindow(
+                    userName
+                    );
+
+            homeWindow->setAttribute(
+                Qt::WA_DeleteOnClose
                 );
 
-        homeWindow->setAttribute(
-            Qt::WA_DeleteOnClose
-            );
+
+            // =================================================
+            // LOGOUT
+            // =================================================
+
+            connect(
+                homeWindow,
+                &HomeWindow::logoutRequested,
+                this,
+                [this, homeWindow]()
+                {
+                    homeWindow->close();
+
+                    this->show();
+
+                    this->raise();
+
+                    this->activateWindow();
+
+                    emailEdit->clear();
+
+                    passwordEdit->clear();
+
+                    emailEdit->setFocus();
+                }
+                );
 
 
-        // =================================================
-        // LOGOUT
-        // =================================================
+            // =================================================
+            // BROWSE BOOKS
+            // =================================================
 
-        connect(
-            homeWindow,
-            &HomeWindow::logoutRequested,
-            this,
-            [this, homeWindow]()
-            {
-                homeWindow->close();
+            connect(
+                homeWindow,
+                &HomeWindow::browseBooksRequested,
+                this,
+                [homeWindow]()
+                {
+                    BrowseWindow *browseWindow =
+                        new BrowseWindow(
+                            homeWindow->windowTitle()
+                            );
 
-                this->show();
-
-                this->raise();
-
-                this->activateWindow();
-
-                emailEdit->clear();
-
-                passwordEdit->clear();
-
-                emailEdit->setFocus();
-            }
-            );
-
-
-        // =================================================
-        // BROWSE BOOKS
-        // =================================================
-
-        connect(
-            homeWindow,
-            &HomeWindow::browseBooksRequested,
-            this,
-            [homeWindow]()
-            {
-                BrowseWindow *browseWindow =
-                    new BrowseWindow(
-                        homeWindow->windowTitle()
-                        );
-
-                browseWindow->setAttribute(
-                    Qt::WA_DeleteOnClose
-                    );
-
-
-                connect(
-                    browseWindow,
-                    &BrowseWindow::backRequested,
-                    browseWindow,
-                    [browseWindow]()
-                    {
-                        browseWindow->close();
-                    }
-                    );
-
-
-                browseWindow->show();
-
-                browseWindow->raise();
-
-                browseWindow->activateWindow();
-            }
-            );
-
-
-        // =================================================
-        // SELL BOOK
-        // =================================================
-
-        connect(
-            homeWindow,
-            &HomeWindow::sellBookRequested,
-            this,
-            [homeWindow, userName]()
-            {
-                SellWindow *sellWindow =
-                    new SellWindow(
-                        userName,
-                        homeWindow
+                    browseWindow->setAttribute(
+                        Qt::WA_DeleteOnClose
                         );
 
 
-                sellWindow->setAttribute(
-                    Qt::WA_DeleteOnClose
-                    );
+                    connect(
+                        browseWindow,
+                        &BrowseWindow::backRequested,
+                        browseWindow,
+                        [browseWindow]()
+                        {
+                            browseWindow->close();
+                        }
+                        );
+
+                    connect(
+                        browseWindow,
+                        &BrowseWindow::bookSelected,
+                        browseWindow,
+                        [homeWindow](const QString &bookId)
+                        {
+                            BookDetailsWindow *details =
+                                new BookDetailsWindow(
+                                    bookId,
+                                    homeWindow->windowTitle()
+                                    );
+
+                            details->setAttribute(
+                                Qt::WA_DeleteOnClose
+                                );
+
+                            connect(
+                                details,
+                                &BookDetailsWindow::backRequested,
+                                details,
+                                &QWidget::close
+                                );
+
+                            details->show();
+                            details->raise();
+                            details->activateWindow();
+                        }
+                        );
+
+                    browseWindow->show();
+
+                    browseWindow->raise();
+
+                    browseWindow->activateWindow();
+                }
+                );
 
 
-                // -----------------------------------------
-                // BACK BUTTON
-                // -----------------------------------------
+            // =================================================
+            // SELL BOOK
+            // =================================================
 
-                connect(
-                    sellWindow,
-                    &SellWindow::backRequested,
-                    sellWindow,
-                    [sellWindow]()
-                    {
-                        sellWindow->close();
-                    }
-                    );
-
-
-                // -----------------------------------------
-                // BOOK ADDED
-                // -----------------------------------------
-
-                connect(
-                    sellWindow,
-                    &SellWindow::bookAdded,
-                    homeWindow,
-                    [homeWindow]()
-                    {
-                        homeWindow->refreshRecentBooks();
-                    }
-                    );
+            connect(
+                homeWindow,
+                &HomeWindow::sellBookRequested,
+                this,
+                [homeWindow, userName]()
+                {
+                    SellWindow *sellWindow =
+                        new SellWindow(
+                            userName,
+                            homeWindow
+                            );
 
 
-                // -----------------------------------------
-                // SHOW SELL WINDOW
-                // -----------------------------------------
-
-                sellWindow->show();
-
-                sellWindow->raise();
-
-                sellWindow->activateWindow();
-            }
-            );
+                    sellWindow->setAttribute(
+                        Qt::WA_DeleteOnClose
+                        );
 
 
-        // =================================================
-        // SHOW HOME WINDOW
-        // =================================================
+                    // -----------------------------------------
+                    // BACK BUTTON
+                    // -----------------------------------------
 
-        homeWindow->show();
-
-        homeWindow->raise();
-
-        homeWindow->activateWindow();
-
-
-        // =================================================
-        // HIDE LOGIN WINDOW
-        // =================================================
-
-        this->hide();
-
-        return;
-    }
+                    connect(
+                        sellWindow,
+                        &SellWindow::backRequested,
+                        sellWindow,
+                        [sellWindow]()
+                        {
+                            sellWindow->close();
+                        }
+                        );
 
 
-    // =====================================================
-    // LOGIN FAILED
-    // =====================================================
+                    // -----------------------------------------
+                    // BOOK ADDED
+                    // -----------------------------------------
 
-    QMessageBox::warning(
-        this,
-        "Login Failed",
-        "Incorrect email or password."
-        );
+                    connect(
+                        sellWindow,
+                        &SellWindow::bookAdded,
+                        homeWindow,
+                        [homeWindow]()
+                        {
+                            homeWindow->refreshRecentBooks();
+                        }
+                        );
 
 
-    passwordEdit->clear();
+                    // -----------------------------------------
+                    // SHOW SELL WINDOW
+                    // -----------------------------------------
 
-    passwordEdit->setFocus();
+                    sellWindow->show();
+
+                    sellWindow->raise();
+
+                    sellWindow->activateWindow();
+                }
+                );
+
+
+            // =================================================
+            // MY LISTINGS
+            // =================================================
+            connect(
+                homeWindow,
+                &HomeWindow::listingsRequested,
+                this,
+                [homeWindow, userName]()
+                {
+                    ListingsWindow *listings = new ListingsWindow(userName, homeWindow);
+                    listings->setAttribute(Qt::WA_DeleteOnClose);
+                    connect(listings, &ListingsWindow::backRequested, listings, &QWidget::close);
+                    connect(listings, &ListingsWindow::addNewListingRequested, homeWindow, &HomeWindow::handleSellBook);
+                    listings->show();
+                    listings->raise();
+                    listings->activateWindow();
+                }
+                );
+
+
+            // =================================================
+            // MY ORDERS
+            // =================================================
+            connect(
+                homeWindow,
+                &HomeWindow::ordersRequested,
+                this,
+                [homeWindow, userName]()
+                {
+                    OrdersWindow *orders = new OrdersWindow(userName, homeWindow);
+                    orders->setAttribute(Qt::WA_DeleteOnClose);
+                    connect(orders, &OrdersWindow::backRequested, orders, &QWidget::close);
+                    connect(orders, &OrdersWindow::browseRequested, homeWindow, &HomeWindow::handleBrowseBooks);
+                    orders->show();
+                    orders->raise();
+                    orders->activateWindow();
+                }
+                );
+
+
+            // =================================================
+            // SHOPPING CART
+            // =================================================
+            connect(
+                homeWindow,
+                &HomeWindow::cartRequested,
+                this,
+                [homeWindow]()
+                {
+                    CartWindow *cartWin = new CartWindow(homeWindow);
+                    cartWin->setAttribute(Qt::WA_DeleteOnClose);
+                    connect(cartWin, &CartWindow::backRequested, cartWin, &QWidget::close);
+                    connect(cartWin, &CartWindow::browseRequested, [cartWin, homeWindow]() {
+                        cartWin->close();
+                        homeWindow->handleBrowseBooks();
+                    });
+                    connect(cartWin, &CartWindow::cartCountChanged, homeWindow, &HomeWindow::updateCartBadge);
+                    connect(cartWin, &CartWindow::checkoutRequested, [cartWin, homeWindow]() {
+                        CheckoutWindow *checkout = new CheckoutWindow(homeWindow);
+                        checkout->setAttribute(Qt::WA_DeleteOnClose);
+                        connect(checkout, &CheckoutWindow::backRequested, [checkout, cartWin]() {
+                            checkout->close();
+                            cartWin->show();
+                            cartWin->raise();
+                            cartWin->activateWindow();
+                        });
+                        connect(checkout, &CheckoutWindow::orderPlaced, [checkout, cartWin, homeWindow](const QString &orderId) {
+                            checkout->close();
+                            cartWin->close();
+                            homeWindow->refreshCartCount();
+
+                            OrderDetailWindow *detail = new OrderDetailWindow(orderId, homeWindow);
+                            detail->setAttribute(Qt::WA_DeleteOnClose);
+                            connect(detail, &OrderDetailWindow::backRequested, detail, &QWidget::close);
+                            detail->show();
+                            detail->raise();
+                            detail->activateWindow();
+                        });
+                        cartWin->hide();
+                        checkout->show();
+                        checkout->raise();
+                        checkout->activateWindow();
+                    });
+
+                    cartWin->show();
+                    cartWin->raise();
+                    cartWin->activateWindow();
+                }
+                );
+
+
+            // =================================================
+            // EXCHANGES
+            // =================================================
+            connect(
+                homeWindow,
+                &HomeWindow::exchangesRequested,
+                this,
+                [homeWindow]()
+                {
+                    ExchangeWindow *exWin = new ExchangeWindow(homeWindow);
+                    exWin->setAttribute(Qt::WA_DeleteOnClose);
+                    connect(exWin, &ExchangeWindow::backRequested, exWin, &QWidget::close);
+                    exWin->show();
+                    exWin->raise();
+                    exWin->activateWindow();
+                }
+                );
+
+
+            // =================================================
+            // SHOW HOME WINDOW
+            // =================================================
+
+            homeWindow->show();
+
+            homeWindow->raise();
+
+            homeWindow->activateWindow();
+
+
+            // =================================================
+            // HIDE LOGIN WINDOW
+            // =================================================
+
+            this->hide();
+        }
+        else
+        {
+            QMessageBox::warning(
+                this,
+                "Login Failed",
+                errorMsg.isEmpty() ? "Incorrect email or password." : errorMsg
+                );
+
+            passwordEdit->clear();
+            passwordEdit->setFocus();
+        }
+    });
 }
 
 

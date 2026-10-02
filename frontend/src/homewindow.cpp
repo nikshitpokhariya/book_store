@@ -1,6 +1,10 @@
 #include "homewindow.h"
-#include "database.h"
 #include "bookdetailswindow.h"
+#include "network/ApiClient.h"
+#include "auth/SessionManager.h"
+#include "models/DataModels.h"
+#include <QUrlQuery>
+#include <QNetworkReply>
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -33,6 +37,8 @@ HomeWindow::HomeWindow(const QString &userName,
     userName(userName),
     searchEdit(nullptr),
     searchButton(nullptr),
+    cartButton(nullptr),
+    exchangesButton(nullptr),
     logoutButton(nullptr),
     recentBooksLayout(nullptr)
 {
@@ -42,6 +48,7 @@ HomeWindow::HomeWindow(const QString &userName,
     setMinimumSize(1000, 650);
 
     setupUI();
+    refreshCartCount();
 }
 
 
@@ -250,14 +257,19 @@ QWidget* HomeWindow::createNavigationBar()
     QPushButton *sellButton = createNavButton("Sell Your Book");
     QPushButton *listingButton = createNavButton("My Listings");
     QPushButton *ordersButton = createNavButton("My Orders");
+    exchangesButton = createNavButton("Exchanges");
+    cartButton = createNavButton("Cart (0)");
 
     layout->addWidget(browseButton);
     layout->addWidget(sellButton);
     layout->addWidget(listingButton);
     layout->addWidget(ordersButton);
+    layout->addWidget(exchangesButton);
+    layout->addWidget(cartButton);
     layout->addStretch();
 
-    QLabel *userLabel = new QLabel("Hello, " + userName);
+    const QString displayName = SessionManager::instance().username().isEmpty() ? userName : SessionManager::instance().username();
+    QLabel *userLabel = new QLabel("Hello, " + displayName);
     userLabel->setStyleSheet(R"(
         QLabel {
             color: #374151;
@@ -294,6 +306,8 @@ QWidget* HomeWindow::createNavigationBar()
     connect(sellButton, &QPushButton::clicked, this, &HomeWindow::handleSellBook);
     connect(listingButton, &QPushButton::clicked, this, &HomeWindow::handleListings);
     connect(ordersButton, &QPushButton::clicked, this, &HomeWindow::handleOrders);
+    connect(exchangesButton, &QPushButton::clicked, this, &HomeWindow::handleExchanges);
+    connect(cartButton, &QPushButton::clicked, this, &HomeWindow::handleCart);
     connect(logoutButton, &QPushButton::clicked, this, &HomeWindow::handleLogout);
 
     return nav;
@@ -655,70 +669,83 @@ void HomeWindow::refreshRecentBooks()
         return;
     }
 
-    QLayoutItem *item;
-    while ((item = recentBooksLayout->takeAt(0)) != nullptr)
+    auto *reply = ApiClient::instance().getPublic(QStringLiteral("/api/books"), QUrlQuery("limit=8&sort=newest"));
+    connect(reply, &QNetworkReply::finished, this, [this, reply]()
     {
-        if (item->widget())
+        auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
+        reply->deleteLater();
+
+        if (!recentBooksLayout) return;
+
+        QLayoutItem *item;
+        while ((item = recentBooksLayout->takeAt(0)) != nullptr)
         {
-            delete item->widget();
-        }
-        else if (item->layout())
-        {
-            QLayout *subLayout = item->layout();
-            QLayoutItem *subItem;
-            while ((subItem = subLayout->takeAt(0)) != nullptr)
+            if (item->widget())
             {
-                if (subItem->widget())
+                delete item->widget();
+                delete item;
+            }
+            else if (item->layout())
+            {
+                QLayout *subLayout = item->layout();
+                QLayoutItem *subItem;
+                while ((subItem = subLayout->takeAt(0)) != nullptr)
                 {
-                    delete subItem->widget();
+                    if (subItem->widget())
+                    {
+                        delete subItem->widget();
+                    }
+                    delete subItem;
                 }
-                delete subItem;
+                delete subLayout;
             }
-            delete subLayout;
+            else
+            {
+                delete item;
+            }
         }
-        delete item;
-    }
 
-    QList<Book> books = Database::instance().getRecentBooks(8);
+        const QJsonArray booksArr = json.value(QStringLiteral("books")).toArray();
 
-    if (books.isEmpty())
-    {
-        QLabel *empty = new QLabel(
-            "No books have been listed yet.\n\n"
-            "Be the first person to sell a book!"
-            );
-        empty->setAlignment(Qt::AlignCenter);
-        empty->setMinimumHeight(180);
-        empty->setStyleSheet(R"(
-            QLabel {
-                background-color: white;
-                border: 1px solid #E5E7EB;
-                border-radius: 15px;
-                color: #6B7280;
-                font-size: 14px;
-                font-weight: 600;
-            }
-        )");
+        if (!ok || booksArr.isEmpty())
+        {
+            QLabel *empty = new QLabel(
+                "No books have been listed yet.\n\n"
+                "Be the first person to sell a book!"
+                );
+            empty->setAlignment(Qt::AlignCenter);
+            empty->setMinimumHeight(180);
+            empty->setStyleSheet(R"(
+                QLabel {
+                    background-color: white;
+                    border: 1px solid #E5E7EB;
+                    border-radius: 15px;
+                    color: #6B7280;
+                    font-size: 14px;
+                    font-weight: 600;
+                }
+            )");
 
-        recentBooksLayout->addWidget(empty);
-    }
-    else
-    {
+            recentBooksLayout->addWidget(empty);
+            return;
+        }
+
         QHBoxLayout *row = new QHBoxLayout();
         row->setSpacing(16);
 
         int count = 0;
 
-        for (const Book &book : books)
+        for (const auto &v : booksArr)
         {
+            BookModel b = BookModel::fromJson(v.toObject());
             QFrame *card = createBookCard(
-                book.id,
-                book.title,
-                book.author,
-                book.condition,
-                QString("₹%1").arg(QString::number(book.price, 'f', 0)),
-                book.location,
-                book.imagePath
+                b.id,
+                b.title,
+                b.author,
+                b.condition,
+                QString("₹%1").arg(QString::number(b.price, 'f', 0)),
+                b.category,
+                b.coverImage
                 );
 
             row->addWidget(card);
@@ -742,7 +769,7 @@ void HomeWindow::refreshRecentBooks()
         {
             delete row;
         }
-    }
+    });
 }
 
 
@@ -848,7 +875,7 @@ QPixmap HomeWindow::loadOrGenerateCover(
 // =========================================================
 
 QFrame* HomeWindow::createBookCard(
-    int bookId,
+    const QString &bookId,
     const QString &title,
     const QString &author,
     const QString &condition,
@@ -985,53 +1012,17 @@ QFrame* HomeWindow::createBookCard(
 // SHOW BOOK DETAILS
 // =========================================================
 
-void HomeWindow::showBookDetails(int bookId)
+void HomeWindow::showBookDetails(const QString &bookId)
 {
-    Book book = Database::instance().getBookById(bookId);
-
-    if (book.id == -1)
-    {
-        QMessageBox::warning(this, "Book Not Found", "The selected book could not be found.");
-        return;
-    }
-
-    QString details;
-    details += "Title: " + book.title + "\n\n";
-    details += "Author: " + book.author + "\n\n";
-    details += "ISBN: " + book.isbn + "\n\n";
-    details += "Category: " + book.category + "\n\n";
-    details += "Condition: " + book.condition + "\n\n";
-    details += "Price: ₹" + QString::number(book.price, 'f', 0) + "\n\n";
-    details += "Location: " + book.location + "\n\n";
-    details += "Seller: " + book.sellerName + "\n\n";
-    details += "Description:\n" + book.description;
-
-    QMessageBox::StandardButton result = QMessageBox::question(
-        this, "Book Details",
-        details + "\n\nDo you want to order this book?",
-        QMessageBox::Yes | QMessageBox::No
-        );
-
-    if (result == QMessageBox::Yes)
-    {
-        if (book.sellerName == userName)
-        {
-            QMessageBox::warning(this, "Cannot Order", "You cannot order your own book.");
-            return;
-        }
-
-        bool success = Database::instance().createOrder(bookId, userName);
-
-        if (success)
-        {
-            QMessageBox::information(this, "Order Placed", "Your order has been placed successfully.");
-            refreshRecentBooks();
-        }
-        else
-        {
-            QMessageBox::warning(this, "Order Failed", "This book may no longer be available.");
-        }
-    }
+    BookDetailsWindow *details = new BookDetailsWindow(bookId, userName);
+    details->setAttribute(Qt::WA_DeleteOnClose);
+    connect(details, &BookDetailsWindow::backRequested, details, &QWidget::close);
+    connect(details, &BookDetailsWindow::addToCartRequested, this, [this](const QString &) {
+        refreshCartCount();
+    });
+    details->show();
+    details->raise();
+    details->activateWindow();
 }
 
 
@@ -1354,30 +1345,41 @@ void HomeWindow::handleSearch()
         return;
     }
 
-    QList<Book> results = Database::instance().searchBooks(searchText);
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("search"), searchText);
+    auto *reply = ApiClient::instance().getPublic(QStringLiteral("/api/books"), query);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, searchText]() {
+        auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
+        reply->deleteLater();
 
-    if (results.isEmpty())
-    {
-        QMessageBox::information(this, "No Results", "No books found for:\n\n" + searchText);
-        return;
-    }
+        if (!ok || !json.contains(QStringLiteral("books"))) {
+            QMessageBox::warning(this, "Search Error", errorMsg.isEmpty() ? "Search failed." : errorMsg);
+            return;
+        }
 
-    QString message = "Books found for \"" + searchText + "\":\n\n";
+        auto arr = json[QStringLiteral("books")].toArray();
+        if (arr.isEmpty()) {
+            QMessageBox::information(this, "No Results", "No books found for:\n\n" + searchText);
+            return;
+        }
 
-    int count = 0;
-
-    for (const Book &book : results)
-    {
-        message += QString::number(++count) + ". " + book.title +
-                   " - ₹" + QString::number(book.price, 'f', 0) + "\n";
-        message += "   by " + book.author + "\n";
-        message += "   " + book.location + "\n\n";
-
-        if (count >= 10)
-            break;
-    }
-
-    QMessageBox::information(this, "Search Results", message);
+        QString message = QString("Found %1 book%2 for \"%3\":\n\n")
+                              .arg(arr.size())
+                              .arg(arr.size() == 1 ? "" : "s")
+                              .arg(searchText);
+        int count = 0;
+        for (const auto &val : arr) {
+            BookModel b = BookModel::fromJson(val.toObject());
+            message += QString("%1. %2 - ₹%3\n   by %4 • %5\n\n")
+                           .arg(++count)
+                           .arg(b.title)
+                           .arg(b.price, 0, 'f', 0)
+                           .arg(b.author)
+                           .arg(b.condition);
+            if (count >= 10) break;
+        }
+        QMessageBox::information(this, "Search Results", message);
+    });
 }
 
 
@@ -1420,6 +1422,37 @@ void HomeWindow::handleOrders()
     emit ordersRequested();
 }
 
+void HomeWindow::handleCart()
+{
+    emit cartRequested();
+}
+
+void HomeWindow::handleExchanges()
+{
+    emit exchangesRequested();
+}
+
+void HomeWindow::refreshCartCount()
+{
+    auto *reply = ApiClient::instance().get(QStringLiteral("/api/cart"));
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
+        reply->deleteLater();
+        if (ok && json.contains(QStringLiteral("cart"))) {
+            auto cartObj = json[QStringLiteral("cart")].toObject();
+            auto itemsArr = cartObj[QStringLiteral("items")].toArray();
+            updateCartBadge(itemsArr.size());
+        }
+    });
+}
+
+void HomeWindow::updateCartBadge(int count)
+{
+    if (cartButton) {
+        cartButton->setText(QString("Cart (%1)").arg(count));
+    }
+}
+
 
 // =========================================================
 // LOGOUT
@@ -1434,6 +1467,9 @@ void HomeWindow::handleLogout()
 
     if (result == QMessageBox::Yes)
     {
+        auto *logoutReply = ApiClient::instance().post(QStringLiteral("/api/auth/logout"), {}, false);
+        connect(logoutReply, &QNetworkReply::finished, logoutReply, &QNetworkReply::deleteLater);
+        SessionManager::instance().clearSession();
         emit logoutRequested();
     }
 }

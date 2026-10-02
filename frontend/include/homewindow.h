@@ -25,21 +25,29 @@ public:
 
     // Dynamically reloads the recent books section from the database
     void refreshRecentBooks();
+    void refreshCartCount();
+    void updateCartBadge(int count);
 
 signals:
     void browseBooksRequested();
     void sellBookRequested();
     void listingsRequested();
     void ordersRequested();
+    void cartRequested();
+    void exchangesRequested();
     void logoutRequested();
+
+public slots:
+    void handleBrowseBooks();
+    void handleSellBook();
+    void handleLogout();
 
 private slots:
     void handleSearch();
-    void handleBrowseBooks();
-    void handleSellBook();
     void handleListings();
     void handleOrders();
-    void handleLogout();
+    void handleCart();
+    void handleExchanges();
 
 private:
     // Main UI
@@ -56,7 +64,7 @@ private:
 
     // Book Cards & Details
     QFrame* createBookCard(
-        int bookId,
+        const QString &bookId,
         const QString &title,
         const QString &author,
         const QString &condition,
@@ -65,7 +73,7 @@ private:
         const QString &imagePath
         );
 
-    void showBookDetails(int bookId);
+    void showBookDetails(const QString &bookId);
 
     // Cover art - either loads a real image, or generates a
     // professional-looking placeholder cover when none exists yet.
@@ -89,6 +97,8 @@ private:
 
     QLineEdit *searchEdit;
     QPushButton *searchButton;
+    QPushButton *cartButton;
+    QPushButton *exchangesButton;
     QPushButton *logoutButton;
 
     QVBoxLayout *recentBooksLayout;

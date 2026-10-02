@@ -20,9 +20,8 @@ private slots:
     void handleSignup();
 
 private:
-    QLineEdit *nameEdit;
+    QLineEdit *usernameEdit;
     QLineEdit *emailEdit;
-    QLineEdit *phoneEdit;
     QLineEdit *passwordEdit;
     QLineEdit *confirmPasswordEdit;
 
@@ -30,4 +29,4 @@ private:
     QPushButton *backButton;
 };
 
-#endif
+#endif // SIGNUPWINDOW_H

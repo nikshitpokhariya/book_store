@@ -63,4 +63,20 @@ Desktop.ini
 # Environment & secrets
 .env
 .env.*
-!.env.example
+!.env.example
+
+# Local Database
+mongodb_data/
+
+# Uploads
+uploads/
+**/uploads/
+
+# QtCreator
+.qtcreator/
+*.user.*
+
+# Test outputs
+*.txt
+!CMakeLists.txt
+!vcpkg.json

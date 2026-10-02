@@ -1,9 +1,10 @@
-﻿#ifndef LISTINGSWINDOW_H
+#ifndef LISTINGSWINDOW_H
 #define LISTINGSWINDOW_H
 
 #include <QWidget>
 #include <QString>
 #include <QVBoxLayout>
+#include "models/DataModels.h"
 
 class QLabel;
 class QPushButton;
@@ -26,15 +27,14 @@ signals:
 private slots:
     void handleBack();
     void handleAddNew();
-    void handleDeleteListing(int bookId, const QString &bookTitle);
+    void handleDeleteListing(const QString &bookId, const QString &bookTitle);
+    void handleEditListing(const BookModel &book);
 
 private:
     void setupUI();
     QWidget* createTopBar();
     QWidget* createStatsBar();
-    QWidget* createListingCard(int bookId, const QString &title, const QString &author,
-                               const QString &category, const QString &condition,
-                               double price, const QString &status, const QString &imagePath);
+    QWidget* createListingCard(const BookModel &book);
 
 private:
     QString userName;

@@ -1,4 +1,7 @@
 #include "sellbookwindow.h"
+#include "network/ApiClient.h"
+#include <QJsonObject>
+#include <QNetworkReply>
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -1021,46 +1024,46 @@ void SellBookWindow::publishBook()
     }
 
 
-    // =====================================================
-    // TEMPORARY SUCCESS
-    // =====================================================
+    publishButton->setEnabled(false);
+    publishButton->setText("Publishing...");
 
-    /*
-     * MongoDB integration will be added here.
-     *
-     * Later this function will call:
-     *
-     * BookManager::addBook(...)
-     *
-     * which will save:
-     *
-     * title
-     * author
-     * isbn
-     * category
-     * edition
-     * condition
-     * price
-     * description
-     * location
-     * sellerId
-     * image
-     * status
-     * createdAt
-     */
+    QJsonObject body;
+    body[QStringLiteral("title")] = title;
+    body[QStringLiteral("author")] = author;
+    body[QStringLiteral("price")] = price;
+    body[QStringLiteral("condition")] = condition;
+    body[QStringLiteral("category")] = category;
+    body[QStringLiteral("isbn")] = isbn;
+    body[QStringLiteral("description")] = description;
+    body[QStringLiteral("coverImage")] = imagePath;
 
+    auto *reply = ApiClient::instance().post(QStringLiteral("/api/books"), body, true);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, title, price]() {
+        auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
+        reply->deleteLater();
 
-    QMessageBox::information(
-        this,
-        "Book Published",
-        "Your book has been successfully listed!\n\n"
-        "Title: " + title +
-            "\nPrice: ₹" +
-            QString::number(price, 'f', 2)
-        );
+        publishButton->setEnabled(true);
+        publishButton->setText("Publish Book");
 
+        if (ok) {
+            QMessageBox::information(
+                this,
+                "Book Published",
+                "Your book has been successfully listed!\n\n"
+                "Title: " + title +
+                "\nPrice: ₹" + QString::number(price, 'f', 2)
+            );
 
-    emit bookPublished();
+            emit bookPublished();
+            close();
+        } else {
+            QMessageBox::critical(
+                this,
+                "Unable to Publish",
+                errorMsg.isEmpty() ? "Failed to publish listing." : errorMsg
+            );
+        }
+    });
 }
 
 

@@ -1,5 +1,5 @@
 #include "signupwindow.h"
-#include "database.h"
+#include "network/ApiClient.h"
 
 #include <QVBoxLayout>
 #include <QLineEdit>
@@ -8,242 +8,134 @@
 #include <QMessageBox>
 #include <QFont>
 #include <QRegularExpression>
+#include <QJsonObject>
+#include <QNetworkReply>
 
 SignupWindow::SignupWindow(QWidget *parent)
     : QWidget(parent)
 {
-    setWindowTitle("BookMarket - Sign Up");
+    setWindowTitle("BookBazzar - Sign Up");
+    resize(450, 560);
 
-    resize(450, 600);
-
-    QLabel *title =
-        new QLabel("Create Account");
-
+    QLabel *title = new QLabel("Create Account");
     QFont titleFont;
     titleFont.setPointSize(24);
     titleFont.setBold(true);
-
     title->setFont(titleFont);
     title->setAlignment(Qt::AlignCenter);
 
-    nameEdit =
-        new QLineEdit();
+    usernameEdit = new QLineEdit();
+    usernameEdit->setPlaceholderText("Username (3–30 characters)");
 
-    nameEdit->setPlaceholderText("Full Name");
+    emailEdit = new QLineEdit();
+    emailEdit->setPlaceholderText("Email Address");
 
-    emailEdit =
-        new QLineEdit();
-
-    emailEdit->setPlaceholderText("Email");
-
-    phoneEdit =
-        new QLineEdit();
-
-    phoneEdit->setPlaceholderText("Phone Number");
-
-    passwordEdit =
-        new QLineEdit();
-
-    passwordEdit->setPlaceholderText("Password");
+    passwordEdit = new QLineEdit();
+    passwordEdit->setPlaceholderText("Password (at least 8 characters)");
     passwordEdit->setEchoMode(QLineEdit::Password);
 
-    confirmPasswordEdit =
-        new QLineEdit();
+    confirmPasswordEdit = new QLineEdit();
+    confirmPasswordEdit->setPlaceholderText("Confirm Password");
+    confirmPasswordEdit->setEchoMode(QLineEdit::Password);
 
-    confirmPasswordEdit->setPlaceholderText(
-        "Confirm Password"
-        );
-
-    confirmPasswordEdit->setEchoMode(
-        QLineEdit::Password
-        );
-
-    signupButton =
-        new QPushButton("Create Account");
-
-    backButton =
-        new QPushButton("Back to Login");
+    signupButton = new QPushButton("Create Account");
+    backButton = new QPushButton("Back to Login");
 
     signupButton->setMinimumHeight(45);
     backButton->setMinimumHeight(45);
 
-    QVBoxLayout *layout =
-        new QVBoxLayout(this);
-
+    QVBoxLayout *layout = new QVBoxLayout(this);
     layout->setSpacing(12);
-
-    layout->setContentsMargins(
-        50, 35, 50, 35
-        );
+    layout->setContentsMargins(50, 35, 50, 35);
 
     layout->addWidget(title);
-
     layout->addSpacing(15);
-
-    layout->addWidget(nameEdit);
+    layout->addWidget(usernameEdit);
     layout->addWidget(emailEdit);
-    layout->addWidget(phoneEdit);
     layout->addWidget(passwordEdit);
     layout->addWidget(confirmPasswordEdit);
-
     layout->addSpacing(10);
-
     layout->addWidget(signupButton);
     layout->addWidget(backButton);
-
     layout->addStretch();
 
-    connect(
-        signupButton,
-        &QPushButton::clicked,
-        this,
-        &SignupWindow::handleSignup
-        );
-
-    connect(
-        backButton,
-        &QPushButton::clicked,
-        this,
-        [this]()
-        {
-            hide();
-        }
-        );
+    connect(signupButton, &QPushButton::clicked, this, &SignupWindow::handleSignup);
+    connect(backButton, &QPushButton::clicked, this, [this]() {
+        hide();
+    });
 }
 
 void SignupWindow::handleSignup()
 {
-    QString name =
-        nameEdit->text().trimmed();
+    const QString username = usernameEdit->text().trimmed();
+    const QString email = emailEdit->text().trimmed();
+    const QString password = passwordEdit->text();
+    const QString confirmPassword = confirmPasswordEdit->text();
 
-    QString email =
-        emailEdit->text().trimmed();
-
-    QString phone =
-        phoneEdit->text().trimmed();
-
-    QString password =
-        passwordEdit->text();
-
-    QString confirmPassword =
-        confirmPasswordEdit->text();
-
-    if (name.isEmpty())
-    {
-        QMessageBox::warning(
-            this,
-            "Sign Up",
-            "Please enter your name."
-            );
-
+    if (username.length() < 3 || username.length() > 30) {
+        QMessageBox::warning(this, "Sign Up", "Username must be between 3 and 30 characters.");
+        usernameEdit->setFocus();
         return;
     }
 
-    if (email.isEmpty())
-    {
-        QMessageBox::warning(
-            this,
-            "Sign Up",
-            "Please enter your email."
-            );
-
+    if (email.isEmpty()) {
+        QMessageBox::warning(this, "Sign Up", "Please enter your email.");
+        emailEdit->setFocus();
         return;
     }
 
-    QRegularExpression emailRegex(
-        R"(^[\w\.-]+@[\w\.-]+\.\w+$)"
-        );
-
-    if (!emailRegex.match(email).hasMatch())
-    {
-        QMessageBox::warning(
-            this,
-            "Sign Up",
-            "Please enter a valid email."
-            );
-
+    static const QRegularExpression emailRegex(QStringLiteral(R"(^[\w\.-]+@[\w\.-]+\.\w+$)"));
+    if (!emailRegex.match(email).hasMatch()) {
+        QMessageBox::warning(this, "Sign Up", "Please enter a valid email address.");
+        emailEdit->setFocus();
         return;
     }
 
-    if (phone.isEmpty())
-    {
-        QMessageBox::warning(
-            this,
-            "Sign Up",
-            "Please enter your phone number."
-            );
-
+    if (password.length() < 8) {
+        QMessageBox::warning(this, "Sign Up", "Password must contain at least 8 characters.");
+        passwordEdit->setFocus();
         return;
     }
 
-    if (password.length() < 6)
-    {
-        QMessageBox::warning(
-            this,
-            "Sign Up",
-            "Password must contain at least 6 characters."
-            );
-
+    if (password != confirmPassword) {
+        QMessageBox::warning(this, "Sign Up", "Passwords do not match.");
+        confirmPasswordEdit->setFocus();
         return;
     }
 
-    if (password != confirmPassword)
-    {
-        QMessageBox::warning(
-            this,
-            "Sign Up",
-            "Passwords do not match."
+    signupButton->setEnabled(false);
+    signupButton->setText("Creating Account...");
+
+    QJsonObject body;
+    body[QStringLiteral("username")] = username;
+    body[QStringLiteral("email")] = email;
+    body[QStringLiteral("password")] = password;
+
+    auto *reply = ApiClient::instance().post(QStringLiteral("/api/auth/signup"), body, false);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
+        reply->deleteLater();
+
+        signupButton->setEnabled(true);
+        signupButton->setText("Create Account");
+
+        if (ok) {
+            QMessageBox::information(
+                this,
+                "Account Created",
+                "Your account has been created successfully! Please log in."
             );
 
-        return;
-    }
+            usernameEdit->clear();
+            emailEdit->clear();
+            passwordEdit->clear();
+            confirmPasswordEdit->clear();
 
-    Database &database =
-        Database::instance();
-
-    if (database.userExists(email))
-    {
-        QMessageBox::warning(
-            this,
-            "Sign Up",
-            "An account with this email already exists."
-            );
-
-        return;
-    }
-
-    bool success =
-        database.registerUser(
-            name,
-            email,
-            phone,
-            password
-            );
-
-    if (success)
-    {
-        QMessageBox::information(
-            this,
-            "Account Created",
-            "Your account has been created successfully!"
-            );
-
-        nameEdit->clear();
-        emailEdit->clear();
-        phoneEdit->clear();
-        passwordEdit->clear();
-        confirmPasswordEdit->clear();
-
-        emit signupSuccessful();
-
-        hide();
-    }
-    else
-    {
-        QMessageBox::critical(
-            this,
-            "Error",
-            "Unable to create account."
-            );
-    }
+            emit signupSuccessful();
+            hide();
+        } else {
+            QString displayErr = errorMsg.isEmpty() ? "Unable to create account." : errorMsg;
+            QMessageBox::warning(this, "Sign Up Failed", displayErr);
+        }
+    });
 }
