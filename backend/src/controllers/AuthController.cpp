@@ -61,6 +61,12 @@ void clearRefreshCookie(const HttpResponsePtr &response, bool secure) {
 
   response->addHeader("Set-Cookie", cookie);
 }
+
+struct AuthControllerRegistrar {
+  AuthControllerRegistrar() {
+    AuthController::initPathRouting();
+  }
+} authRegistrar;
 } // namespace
 
 void AuthController::signup(

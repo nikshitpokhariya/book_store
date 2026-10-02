@@ -26,6 +26,7 @@ void MongoDatabase::ensureIndexes() {
 
   auto users = db["users"];
   auto sessions = db["sessions"];
+  auto books = db["books"];
 
   // users.username UNIQUE
   {

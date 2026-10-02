@@ -13,7 +13,7 @@
     },
 
     "log": {
-        "log_level": "INFO",
+        "log_level": "TRACE",
         "log_local_time": true
     }
 }
