@@ -1,0 +1,423 @@
+{
+  "info": {
+    "name": "Book Exchange Backend — Full API",
+    "_postman_id": "book-exchange-backend-v1",
+    "description": "Complete Postman collection for the Book Exchange Backend (Phases 1–4).\n\n**Setup:**\n1. Set `baseUrl` variable to `http://127.0.0.1:8080`\n2. Run **Auth / Signup** then **Auth / Login** — the access token is saved automatically.\n3. Execute any request.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl",     "value": "http://127.0.0.1:8080", "type": "string" },
+    { "key": "accessToken", "value": "",                       "type": "string" },
+    { "key": "bookId",      "value": "",                       "type": "string" },
+    { "key": "orderId",     "value": "",                       "type": "string" },
+    { "key": "exchangeId",  "value": "",                       "type": "string" },
+    { "key": "reviewId",    "value": "",                       "type": "string" },
+    { "key": "cartBookId",  "value": "",                       "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "1 — Auth",
+      "item": [
+        {
+          "name": "Signup",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/signup", "host": ["{{baseUrl}}"], "path": ["api","auth","signup"] },
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"alice\",\n  \"email\": \"alice@example.com\",\n  \"password\": \"password123\"\n}" }
+          }
+        },
+        {
+          "name": "Login  ← saves token automatically",
+          "event": [{ "listen": "test", "script": { "exec": ["const res = pm.response.json();", "if (res.accessToken) {", "    pm.collectionVariables.set('accessToken', res.accessToken);", "    console.log('Token saved');", "}"], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api","auth","login"] },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"alice@example.com\",\n  \"password\": \"password123\"\n}" }
+          }
+        },
+        {
+          "name": "Get My Profile (/me)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/me", "host": ["{{baseUrl}}"], "path": ["api","auth","me"] }
+          }
+        },
+        {
+          "name": "Refresh Token (uses cookie)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/auth/refresh", "host": ["{{baseUrl}}"], "path": ["api","auth","refresh"] },
+            "description": "Postman Desktop handles the HttpOnly cookie automatically from the Login response."
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/logout", "host": ["{{baseUrl}}"], "path": ["api","auth","logout"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2 — Books (Marketplace)",
+      "item": [
+        {
+          "name": "Create Book Listing",
+          "event": [{ "listen": "test", "script": { "exec": ["const res = pm.response.json();", "if (res.book && res.book.id) pm.collectionVariables.set('bookId', res.book.id);"], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/books", "host": ["{{baseUrl}}"], "path": ["api","books"] },
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Clean Code\",\n  \"author\": \"Robert C. Martin\",\n  \"isbn\": \"978-0132350884\",\n  \"price\": 499,\n  \"condition\": \"Good\",\n  \"category\": \"Programming\",\n  \"description\": \"A classic book on writing clean, maintainable code.\"\n}" }
+          }
+        },
+        {
+          "name": "Browse Available Books",
+          "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/api/books", "host": ["{{baseUrl}}"], "path": ["api","books"] } }
+        },
+        {
+          "name": "Search (title / author / ISBN)",
+          "request": {
+            "method": "GET", "header": [],
+            "url": { "raw": "{{baseUrl}}/api/books?search=clean code", "host": ["{{baseUrl}}"], "path": ["api","books"], "query": [{ "key": "search", "value": "clean code" }] }
+          }
+        },
+        {
+          "name": "Filter by Category",
+          "request": {
+            "method": "GET", "header": [],
+            "url": { "raw": "{{baseUrl}}/api/books?category=Programming", "host": ["{{baseUrl}}"], "path": ["api","books"], "query": [{ "key": "category", "value": "Programming" }] }
+          }
+        },
+        {
+          "name": "Filter by Price Range",
+          "request": {
+            "method": "GET", "header": [],
+            "url": { "raw": "{{baseUrl}}/api/books?minPrice=200&maxPrice=600", "host": ["{{baseUrl}}"], "path": ["api","books"], "query": [{ "key": "minPrice", "value": "200" }, { "key": "maxPrice", "value": "600" }] }
+          }
+        },
+        {
+          "name": "Sort by Price Ascending",
+          "request": {
+            "method": "GET", "header": [],
+            "url": { "raw": "{{baseUrl}}/api/books?sort=price_asc", "host": ["{{baseUrl}}"], "path": ["api","books"], "query": [{ "key": "sort", "value": "price_asc" }] }
+          }
+        },
+        {
+          "name": "Sort by Price Descending",
+          "request": {
+            "method": "GET", "header": [],
+            "url": { "raw": "{{baseUrl}}/api/books?sort=price_desc", "host": ["{{baseUrl}}"], "path": ["api","books"], "query": [{ "key": "sort", "value": "price_desc" }] }
+          }
+        },
+        {
+          "name": "Paginate (page=1, limit=5)",
+          "request": {
+            "method": "GET", "header": [],
+            "url": { "raw": "{{baseUrl}}/api/books?page=1&limit=5", "host": ["{{baseUrl}}"], "path": ["api","books"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "5" }] }
+          }
+        },
+        {
+          "name": "My Listings",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/books/my", "host": ["{{baseUrl}}"], "path": ["api","books","my"] }
+          }
+        },
+        {
+          "name": "Get Book by ID",
+          "request": {
+            "method": "GET", "header": [],
+            "url": { "raw": "{{baseUrl}}/api/books/{{bookId}}", "host": ["{{baseUrl}}"], "path": ["api","books","{{bookId}}"] }
+          }
+        },
+        {
+          "name": "Update Own Book Listing",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/books/{{bookId}}", "host": ["{{baseUrl}}"], "path": ["api","books","{{bookId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"price\": 449,\n  \"description\": \"Updated — excellent condition, no marks.\"\n}" }
+          }
+        },
+        {
+          "name": "Delete (Soft-Remove) Own Listing",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/books/{{bookId}}", "host": ["{{baseUrl}}"], "path": ["api","books","{{bookId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 — Cart",
+      "item": [
+        {
+          "name": "View Cart",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/cart", "host": ["{{baseUrl}}"], "path": ["api","cart"] }
+          }
+        },
+        {
+          "name": "Add Book to Cart",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/cart/items", "host": ["{{baseUrl}}"], "path": ["api","cart","items"] },
+            "body": { "mode": "raw", "raw": "{\n  \"bookId\": \"{{cartBookId}}\"\n}" },
+            "description": "Set cartBookId to a book NOT owned by the logged-in user."
+          }
+        },
+        {
+          "name": "Remove Book from Cart",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/cart/items/{{cartBookId}}", "host": ["{{baseUrl}}"], "path": ["api","cart","items","{{cartBookId}}"] }
+          }
+        },
+        {
+          "name": "Clear Entire Cart",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/cart", "host": ["{{baseUrl}}"], "path": ["api","cart"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4 — Checkout & Orders",
+      "item": [
+        {
+          "name": "Checkout — UPI",
+          "event": [{ "listen": "test", "script": { "exec": ["const res = pm.response.json();", "if (res.order && res.order.id) pm.collectionVariables.set('orderId', res.order.id);"], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/checkout", "host": ["{{baseUrl}}"], "path": ["api","checkout"] },
+            "body": { "mode": "raw", "raw": "{\n  \"paymentMethod\": \"UPI\",\n  \"shippingAddress\": {\n    \"fullName\": \"Alice Smith\",\n    \"addressLine\": \"123 MG Road\",\n    \"city\": \"Bengaluru\",\n    \"state\": \"Karnataka\",\n    \"pincode\": \"560001\",\n    \"country\": \"India\",\n    \"phone\": \"9876543210\"\n  }\n}" },
+            "description": "Add at least one book to cart first. Server calculates total — any client-side total is ignored."
+          }
+        },
+        {
+          "name": "Checkout — COD",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/checkout", "host": ["{{baseUrl}}"], "path": ["api","checkout"] },
+            "body": { "mode": "raw", "raw": "{\n  \"paymentMethod\": \"COD\",\n  \"shippingAddress\": {\n    \"fullName\": \"Alice Smith\",\n    \"addressLine\": \"123 MG Road\",\n    \"city\": \"Bengaluru\",\n    \"state\": \"Karnataka\",\n    \"pincode\": \"560001\",\n    \"country\": \"India\",\n    \"phone\": \"9876543210\"\n  }\n}" }
+          }
+        },
+        {
+          "name": "Checkout — Simulated Failure (rolls back stock)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/checkout", "host": ["{{baseUrl}}"], "path": ["api","checkout"] },
+            "body": { "mode": "raw", "raw": "{\n  \"paymentMethod\": \"CARD\",\n  \"simulatePaymentFailure\": true,\n  \"shippingAddress\": {\n    \"fullName\": \"Alice Smith\",\n    \"addressLine\": \"123 MG Road\",\n    \"city\": \"Bengaluru\",\n    \"state\": \"Karnataka\",\n    \"pincode\": \"560001\",\n    \"country\": \"India\",\n    \"phone\": \"9876543210\"\n  }\n}" }
+          }
+        },
+        {
+          "name": "My Order History (Buyer)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/orders", "host": ["{{baseUrl}}"], "path": ["api","orders"] }
+          }
+        },
+        {
+          "name": "Get Order Details",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}", "host": ["{{baseUrl}}"], "path": ["api","orders","{{orderId}}"] }
+          }
+        },
+        {
+          "name": "Seller Sales History",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/orders/seller/history", "host": ["{{baseUrl}}"], "path": ["api","orders","seller","history"] }
+          }
+        },
+        {
+          "name": "Update Delivery Status (Seller only)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}/status", "host": ["{{baseUrl}}"], "path": ["api","orders","{{orderId}}","status"] },
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"CONFIRMED\",\n  \"note\": \"Order confirmed and being processed.\"\n}" },
+            "description": "Valid chain: PLACED → CONFIRMED → PACKED → SHIPPED → OUT_FOR_DELIVERY → DELIVERED. Only item sellers may do this."
+          }
+        },
+        {
+          "name": "Cancel Order (Buyer, before SHIPPED)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}/cancel", "host": ["{{baseUrl}}"], "path": ["api","orders","{{orderId}}","cancel"] },
+            "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Changed my mind.\"\n}" }
+          }
+        },
+        {
+          "name": "Request Return (Buyer, after DELIVERED)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}/return", "host": ["{{baseUrl}}"], "path": ["api","orders","{{orderId}}","return"] },
+            "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Book condition did not match the description.\"\n}" }
+          }
+        },
+        {
+          "name": "Process Return — Approve (Seller)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}/return/process", "host": ["{{baseUrl}}"], "path": ["api","orders","{{orderId}}","return","process"] },
+            "body": { "mode": "raw", "raw": "{\n  \"action\": \"approve\"\n}" }
+          }
+        },
+        {
+          "name": "Process Return — Reject (Seller)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}/return/process", "host": ["{{baseUrl}}"], "path": ["api","orders","{{orderId}}","return","process"] },
+            "body": { "mode": "raw", "raw": "{\n  \"action\": \"reject\",\n  \"reason\": \"Return window expired.\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5 — Exchange",
+      "item": [
+        {
+          "name": "Propose Exchange",
+          "event": [{ "listen": "test", "script": { "exec": ["const res = pm.response.json();", "if (res.exchange && res.exchange.id) pm.collectionVariables.set('exchangeId', res.exchange.id);"], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/exchanges", "host": ["{{baseUrl}}"], "path": ["api","exchanges"] },
+            "body": { "mode": "raw", "raw": "{\n  \"requestedBookId\": \"<ID of the book you WANT — must be someone else's>\",\n  \"offeredBookId\": \"<ID of YOUR book to offer>\"\n}" }
+          }
+        },
+        {
+          "name": "My Sent Exchanges",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/exchanges/sent", "host": ["{{baseUrl}}"], "path": ["api","exchanges","sent"] }
+          }
+        },
+        {
+          "name": "My Received Exchanges",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/exchanges/received", "host": ["{{baseUrl}}"], "path": ["api","exchanges","received"] }
+          }
+        },
+        {
+          "name": "Exchange History",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/exchanges/history", "host": ["{{baseUrl}}"], "path": ["api","exchanges","history"] }
+          }
+        },
+        {
+          "name": "Get Exchange Details",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/exchanges/{{exchangeId}}", "host": ["{{baseUrl}}"], "path": ["api","exchanges","{{exchangeId}}"] }
+          }
+        },
+        {
+          "name": "Accept Exchange (Receiver only)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/exchanges/{{exchangeId}}/accept", "host": ["{{baseUrl}}"], "path": ["api","exchanges","{{exchangeId}}","accept"] }
+          }
+        },
+        {
+          "name": "Reject Exchange (Receiver only)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/exchanges/{{exchangeId}}/reject", "host": ["{{baseUrl}}"], "path": ["api","exchanges","{{exchangeId}}","reject"] }
+          }
+        },
+        {
+          "name": "Cancel Exchange (Requester only)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/exchanges/{{exchangeId}}/cancel", "host": ["{{baseUrl}}"], "path": ["api","exchanges","{{exchangeId}}","cancel"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6 — Reviews",
+      "item": [
+        {
+          "name": "Submit Review (DELIVERED orders only)",
+          "event": [{ "listen": "test", "script": { "exec": ["const res = pm.response.json();", "if (res.review && res.review.id) pm.collectionVariables.set('reviewId', res.review.id);"], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/reviews", "host": ["{{baseUrl}}"], "path": ["api","reviews"] },
+            "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"bookId\": \"{{bookId}}\",\n  \"rating\": 5,\n  \"comment\": \"Excellent book, exactly as described!\"\n}" },
+            "description": "Order must be DELIVERED. Rating must be 1–5. One review per order per book."
+          }
+        },
+        {
+          "name": "Get Book Reviews (Public)",
+          "request": {
+            "method": "GET", "header": [],
+            "url": { "raw": "{{baseUrl}}/api/books/{{bookId}}/reviews", "host": ["{{baseUrl}}"], "path": ["api","books","{{bookId}}","reviews"] }
+          }
+        },
+        {
+          "name": "My Reviews",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/reviews/my", "host": ["{{baseUrl}}"], "path": ["api","reviews","my"] }
+          }
+        },
+        {
+          "name": "Update My Review",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/reviews/{{reviewId}}", "host": ["{{baseUrl}}"], "path": ["api","reviews","{{reviewId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"rating\": 4,\n  \"comment\": \"Good book, slightly worn cover.\"\n}" }
+          }
+        },
+        {
+          "name": "Delete My Review",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/reviews/{{reviewId}}", "host": ["{{baseUrl}}"], "path": ["api","reviews","{{reviewId}}"] }
+          }
+        }
+      ]
+    }
+  ]
+}
