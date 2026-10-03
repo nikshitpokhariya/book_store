@@ -46,10 +46,21 @@ Review toReview(const bsoncxx::document::view &view) {
   rev.id = view["_id"].get_oid().value.to_string();
   rev.bookId = getString(view, "bookId");
   rev.orderId = getString(view, "orderId");
+  rev.sellerId = getString(view, "sellerId");
+  rev.sellerUsername = getString(view, "sellerUsername");
   rev.reviewerId = getString(view, "reviewerId");
   rev.reviewerUsername = getString(view, "reviewerUsername");
   rev.rating = getInt(view, "rating", 5);
   rev.comment = getString(view, "comment");
+
+  if (view["images"] && view["images"].type() == bsoncxx::type::k_array) {
+    for (const auto &elem : view["images"].get_array().value) {
+      if (elem.type() == bsoncxx::type::k_string) {
+        rev.images.emplace_back(elem.get_string().value.data(),
+                                elem.get_string().value.size());
+      }
+    }
+  }
 
   if (view["createdAt"] && view["createdAt"].type() == bsoncxx::type::k_date) {
     rev.createdAt = std::chrono::system_clock::time_point{
@@ -71,10 +82,19 @@ std::string ReviewRepository::create(const Review &review) {
   document doc;
   doc.append(kvp("bookId", review.bookId));
   doc.append(kvp("orderId", review.orderId));
+  doc.append(kvp("sellerId", review.sellerId));
+  doc.append(kvp("sellerUsername", review.sellerUsername));
   doc.append(kvp("reviewerId", review.reviewerId));
   doc.append(kvp("reviewerUsername", review.reviewerUsername));
   doc.append(kvp("rating", review.rating));
   doc.append(kvp("comment", review.comment));
+
+  bsoncxx::builder::basic::array imagesArr;
+  for (const auto &img : review.images) {
+    imagesArr.append(img);
+  }
+  doc.append(kvp("images", imagesArr));
+
   doc.append(kvp("createdAt", bsoncxx::types::b_date{now}));
   doc.append(kvp("updatedAt", bsoncxx::types::b_date{now}));
 
@@ -188,6 +208,43 @@ PageResult<Review> ReviewRepository::findByReviewerId(
   return result;
 }
 
+PageResult<Review> ReviewRepository::findBySellerId(
+    const std::string &sellerId, int page, int limit) {
+  auto collection = MongoDatabase::instance().database()["reviews"];
+
+  document filter;
+  filter.append(kvp("sellerId", sellerId));
+
+  const auto total = collection.count_documents(filter.view());
+
+  mongocxx::options::find options;
+  options.sort(make_document(kvp("createdAt", -1)));
+  options.skip(static_cast<std::int64_t>((page - 1) * limit));
+  options.limit(static_cast<std::int64_t>(limit));
+
+  auto cursor = collection.find(filter.view(), options);
+
+  std::vector<Review> items;
+  for (const auto &doc : cursor) {
+    items.push_back(toReview(doc));
+  }
+
+  const int totalPages =
+      limit > 0 ? static_cast<int>((total + limit - 1) / limit) : 0;
+
+  PageResult<Review> result;
+  result.items = std::move(items);
+  result.total = total;
+  result.page = page;
+  result.limit = limit;
+  result.totalPages = totalPages;
+  result.hasNextPage = page < totalPages;
+  result.hasPrevPage = page > 1;
+
+  return result;
+}
+
+
 bool ReviewRepository::update(const std::string &id, int rating,
                               const std::string &comment) {
   bsoncxx::oid objectId;
@@ -264,3 +321,41 @@ ReviewRepository::calculateRatingAggregate(const std::string &bookId) {
 
   return {0.0, 0};
 }
+
+std::pair<double, int>
+ReviewRepository::calculateSellerRatingAggregate(const std::string &sellerId) {
+  auto collection = MongoDatabase::instance().database()["reviews"];
+
+  mongocxx::pipeline pipe;
+  pipe.match(make_document(kvp("sellerId", sellerId)));
+  pipe.group(make_document(
+      kvp("_id", bsoncxx::types::b_null{}),
+      kvp("avgRating", make_document(kvp("$avg", "$rating"))),
+      kvp("count", make_document(kvp("$sum", 1)))));
+
+  auto cursor = collection.aggregate(pipe);
+  for (const auto &doc : cursor) {
+    double avg = 0.0;
+    int cnt = 0;
+    if (doc["avgRating"]) {
+      if (doc["avgRating"].type() == bsoncxx::type::k_double) {
+        avg = doc["avgRating"].get_double().value;
+      } else if (doc["avgRating"].type() == bsoncxx::type::k_int32) {
+        avg = static_cast<double>(doc["avgRating"].get_int32().value);
+      }
+    }
+    if (doc["count"]) {
+      if (doc["count"].type() == bsoncxx::type::k_int32) {
+        cnt = doc["count"].get_int32().value;
+      } else if (doc["count"].type() == bsoncxx::type::k_int64) {
+        cnt = static_cast<int>(doc["count"].get_int64().value);
+      }
+    }
+
+    avg = std::round(avg * 10.0) / 10.0;
+    return {avg, cnt};
+  }
+
+  return {0.0, 0};
+}
+

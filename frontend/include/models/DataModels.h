@@ -35,6 +35,8 @@ struct BookModel {
     double price{0.0};
     QString condition;
     QString coverImage;
+    QStringList images;
+    QString videoUrl;
     QString status;
     double averageRating{0.0};
     int reviewCount{0};
@@ -53,6 +55,18 @@ struct BookModel {
         b.price = obj.value(QStringLiteral("price")).toDouble(0.0);
         b.condition = obj.value(QStringLiteral("condition")).toString();
         b.coverImage = obj.value(QStringLiteral("coverImage")).toString();
+        if (obj.contains(QStringLiteral("images")) && obj[QStringLiteral("images")].isArray()) {
+            for (const auto &v : obj[QStringLiteral("images")].toArray()) {
+                b.images.append(v.toString());
+            }
+        }
+        if (b.images.isEmpty() && !b.coverImage.isEmpty()) {
+            b.images.append(b.coverImage);
+        }
+        if (b.coverImage.isEmpty() && !b.images.isEmpty()) {
+            b.coverImage = b.images.first();
+        }
+        b.videoUrl = obj.value(QStringLiteral("videoUrl")).toString();
         b.status = obj.value(QStringLiteral("status")).toString();
         b.averageRating = obj.value(QStringLiteral("averageRating")).toDouble(0.0);
         b.reviewCount = obj.value(QStringLiteral("reviewCount")).toInt(0);
@@ -354,20 +368,40 @@ struct ReviewModel {
     QString bookId;
     QString reviewerId;
     QString reviewerUsername;
+    QString sellerId;
+    QString sellerUsername;
     int rating{5};
     QString comment;
+    QVector<QString> images;
     QDateTime createdAt;
 
     static ReviewModel fromJson(const QJsonObject &obj) {
-        return {
-            obj.value(QStringLiteral("id")).toString(),
-            obj.value(QStringLiteral("bookId")).toString(),
-            obj.value(QStringLiteral("reviewerId")).toString(),
-            obj.value(QStringLiteral("reviewerUsername")).toString(),
-            obj.value(QStringLiteral("rating")).toInt(5),
-            obj.value(QStringLiteral("comment")).toString(),
-            QDateTime::fromString(obj.value(QStringLiteral("createdAt")).toString(), Qt::ISODate)
-        };
+        ReviewModel rm;
+        rm.id = obj.value(QStringLiteral("id")).toString();
+        rm.bookId = obj.value(QStringLiteral("bookId")).toString();
+        rm.reviewerId = obj.value(QStringLiteral("reviewerId")).toString();
+        rm.reviewerUsername = obj.value(QStringLiteral("reviewerUsername")).toString();
+        rm.sellerId = obj.value(QStringLiteral("sellerId")).toString();
+        rm.sellerUsername = obj.value(QStringLiteral("sellerUsername")).toString();
+        if (obj.contains(QStringLiteral("user")) && obj[QStringLiteral("user")].isObject()) {
+            QJsonObject userObj = obj[QStringLiteral("user")].toObject();
+            if (rm.reviewerUsername.isEmpty()) {
+                rm.reviewerUsername = userObj.value(QStringLiteral("username")).toString();
+            }
+            if (rm.reviewerId.isEmpty()) {
+                rm.reviewerId = userObj.value(QStringLiteral("id")).toString();
+            }
+        }
+        rm.rating = obj.value(QStringLiteral("rating")).toInt(5);
+        rm.comment = obj.value(QStringLiteral("comment")).toString();
+        if (obj.contains(QStringLiteral("images")) && obj[QStringLiteral("images")].isArray()) {
+            const auto arr = obj[QStringLiteral("images")].toArray();
+            for (const auto &img : arr) {
+                rm.images.append(img.toString());
+            }
+        }
+        rm.createdAt = QDateTime::fromString(obj.value(QStringLiteral("createdAt")).toString(), Qt::ISODate);
+        return rm;
     }
 };
 

@@ -11,6 +11,8 @@ class QPushButton;
 class QScrollArea;
 class QFrame;
 class QVBoxLayout;
+class QHBoxLayout;
+class QTextEdit;
 
 class BookDetailsWindow : public QWidget
 {
@@ -28,6 +30,10 @@ public:
     void loadBook();
     void loadReviews();
 
+protected:
+    bool eventFilter(QObject *obj, QEvent *event) override;
+
+
 signals:
     void backRequested();
     void orderPlaced();
@@ -39,6 +45,10 @@ public slots:
 private slots:
     void handleOrder();
     void handleBack();
+    void selectGalleryMedia(int index);
+    void handlePlayVideo();
+    void handleSetRating(int stars);
+    void handleSubmitReview();
 
 private:
     void setupUI();
@@ -46,6 +56,9 @@ private:
     QWidget* createDetailsSection();
     QWidget* createReviewsSection();
     QFrame* createInfoCard(const QString &label, const QString &value);
+    void updateGalleryUI();
+    void checkBuyerStatus();
+    void renderReviewsList(const QVector<ReviewModel> &sellerReviews, double sellerAvgRating, int sellerReviewCount);
 
 private:
     QString bookId;
@@ -53,6 +66,15 @@ private:
     BookModel book;
     QVector<ReviewModel> reviews;
 
+    // Gallery state
+    int currentMediaIndex_{0};
+    QString currentVideoUrl_;
+    QLabel *coverLabel;
+    QPushButton *playVideoBtn;
+    QHBoxLayout *thumbnailsLayout;
+    QVector<QPushButton*> thumbnailBtns;
+
+    // Book Info
     QLabel *titleLabel;
     QLabel *authorLabel;
     QLabel *priceLabel;
@@ -62,10 +84,20 @@ private:
     QLabel *sellerLabel;
     QLabel *ratingLabel;
     QLabel *descriptionLabel;
-    QLabel *coverLabel;
 
+    // Reviews & Buyer check
+    bool hasPurchased_{false};
+    QString buyerOrderId_;
+    int selectedRating_{5};
+
+    QFrame *reviewFormCard_{nullptr};
+    QLabel *buyerNoticeLabel_{nullptr};
+    QVector<QPushButton*> starButtons_;
+    QTextEdit *reviewCommentEdit_{nullptr};
+    QPushButton *submitReviewBtn_{nullptr};
     QVBoxLayout *reviewsLayout;
 
+    // Action buttons
     QPushButton *orderButton;
     QPushButton *exchangeButton;
     QPushButton *backButton;

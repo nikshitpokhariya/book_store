@@ -25,6 +25,8 @@ public:
 signals:
     void backRequested();
     void orderUpdated();
+    void orderCancelled();
+    void orderStatusUpdated();
 
 public slots:
     void handleWriteReview(const QString &bookId, const QString &bookTitle);

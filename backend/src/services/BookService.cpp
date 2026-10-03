@@ -119,6 +119,23 @@ Book BookService::createListing(const std::string &ownerId, Book bookInput) {
   bookInput.ownerId = ownerId;
   bookInput.status = "available";
 
+  if (books_.existsByOwnerAndTitle(ownerId, bookInput.title)) {
+    throw std::invalid_argument("You have already listed a book with this title");
+  }
+
+  if (bookInput.images.size() > 6) {
+    throw std::invalid_argument("Maximum 6 images allowed");
+  }
+  if (!bookInput.images.empty() && bookInput.images.size() < 4) {
+    throw std::invalid_argument("Minimum 4 images required");
+  }
+  if (bookInput.coverImage.empty() && !bookInput.images.empty()) {
+    bookInput.coverImage = bookInput.images.front();
+  }
+  if (bookInput.images.empty() && !bookInput.coverImage.empty()) {
+    bookInput.images.push_back(bookInput.coverImage);
+  }
+
   validateBookInput(bookInput);
 
   bookInput.id = books_.create(bookInput);
@@ -305,4 +322,12 @@ void BookService::removeListing(const std::string &id,
   }
 
   books_.updateStatus(id, "removed");
+}
+
+std::vector<std::string> BookService::getSuggestions(const std::string &query, int limit) {
+  const auto trimmed = trim(query);
+  if (trimmed.empty()) {
+    return {};
+  }
+  return books_.findSuggestions(trimmed, limit);
 }

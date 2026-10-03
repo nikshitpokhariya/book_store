@@ -38,4 +38,6 @@ public:
   bool restoreAvailability(const std::string &bookId);
 
   bool markReturned(const std::string &bookId);
+  bool existsByOwnerAndTitle(const std::string &ownerId, const std::string &title);
+  std::vector<std::string> findSuggestions(const std::string &query, int limit);
 };

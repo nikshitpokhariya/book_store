@@ -1,5 +1,7 @@
 #include "browsewindow.h"
 #include "network/ApiClient.h"
+#include "AppStyle.h"
+#include "ImageLoader.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -10,7 +12,6 @@
 #include <QLabel>
 #include <QFrame>
 #include <QScrollArea>
-#include <QMessageBox>
 #include <QSizePolicy>
 #include <QPixmap>
 #include <QFileInfo>
@@ -19,15 +20,26 @@
 #include <QLinearGradient>
 #include <QUrlQuery>
 #include <QNetworkReply>
+#include <QDoubleSpinBox>
+#include <QTimer>
+#include <QListWidget>
 
-BrowseWindow::BrowseWindow(const QString &userName, QWidget *parent)
+BrowseWindow::BrowseWindow(const QString &userName,
+                           const QString &initialCategory,
+                           const QString &initialSearch,
+                           QWidget *parent)
     : QWidget(parent),
     userName(userName),
     searchEdit(nullptr),
     searchButton(nullptr),
+    suggestionsList(nullptr),
+    debounceTimer(nullptr),
     categoryCombo(nullptr),
     conditionCombo(nullptr),
     sortCombo(nullptr),
+    minPriceSpin(nullptr),
+    maxPriceSpin(nullptr),
+    resetFilterButton(nullptr),
     backButton(nullptr),
     prevPageButton(nullptr),
     nextPageButton(nullptr),
@@ -39,10 +51,23 @@ BrowseWindow::BrowseWindow(const QString &userName, QWidget *parent)
     totalPages(1)
 {
     setWindowTitle("BookBazzar - Browse Books");
-    resize(1400, 850);
-    setMinimumSize(1000, 650);
+    resize(1380, 860);
+    setMinimumSize(1020, 680);
+    setStyleSheet(QString("background-color: %1;").arg(AppStyle::Background));
 
     setupUI();
+
+    if (!initialSearch.isEmpty() && searchEdit) {
+        searchEdit->setText(initialSearch);
+    }
+
+    if (!initialCategory.isEmpty() && categoryCombo) {
+        int idx = categoryCombo->findText(initialCategory, Qt::MatchFixedString);
+        if (idx != -1) {
+            categoryCombo->setCurrentIndex(idx);
+        }
+    }
+
     fetchBooks();
 }
 
@@ -52,41 +77,25 @@ BrowseWindow::~BrowseWindow()
 
 void BrowseWindow::setupUI()
 {
-    setStyleSheet(R"(
-        QWidget {
-            font-family: "Segoe UI";
-        }
-        QScrollArea {
-            border: none;
-            background-color: #F7F8FC;
-        }
-        QScrollBar:vertical {
-            width: 10px;
-            background: transparent;
-            margin: 4px;
-        }
-        QScrollBar::handle:vertical {
-            background: #C7CBD6;
-            border-radius: 5px;
-            min-height: 45px;
-        }
-        QScrollBar::handle:vertical:hover {
-            background: #A5A9B4;
-        }
-    )");
-
     QScrollArea *scrollArea = new QScrollArea(this);
     scrollArea->setWidgetResizable(true);
     scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setStyleSheet(QString(R"(
+        QScrollArea {
+            background-color: %1;
+            border: none;
+        }
+        %2
+    )").arg(AppStyle::Background, AppStyle::scrollBarStyle()));
 
     QWidget *page = new QWidget();
-    page->setStyleSheet("background-color: #F7F8FC;");
+    page->setStyleSheet(QString("background-color: %1;").arg(AppStyle::Background));
 
     QVBoxLayout *pageLayout = new QVBoxLayout(page);
-    pageLayout->setContentsMargins(0, 0, 0, 40);
-    pageLayout->setSpacing(20);
+    pageLayout->setContentsMargins(0, 0, 0, 48);
+    pageLayout->setSpacing(24);
 
     pageLayout->addWidget(createTopBar());
     pageLayout->addWidget(createFilterBar());
@@ -97,167 +106,206 @@ void BrowseWindow::setupUI()
 
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
-    mainLayout->setSpacing(0);
     mainLayout->addWidget(scrollArea);
 }
 
 QWidget* BrowseWindow::createTopBar()
 {
     QFrame *topBar = new QFrame();
-    topBar->setFixedHeight(76);
-    topBar->setStyleSheet("background-color: white; border-bottom: 1px solid #E6E8EF;");
-
-    QHBoxLayout *layout = new QHBoxLayout(topBar);
-    layout->setContentsMargins(32, 10, 32, 10);
-    layout->setSpacing(15);
-
-    backButton = new QPushButton("← Back to Home");
-    backButton->setMinimumHeight(40);
-    backButton->setCursor(Qt::PointingHandCursor);
-    backButton->setStyleSheet(R"(
-        QPushButton {
-            background: transparent;
-            border: 1px solid #E5E7EB;
-            color: #374151;
-            padding: 0 16px;
-            font-size: 13px;
-            font-weight: 700;
-            border-radius: 8px;
+    topBar->setFixedHeight(72);
+    topBar->setStyleSheet(R"(
+        .QFrame {
+            background-color: #FFFFFF;
+            border-bottom: 1px solid #E2E8F0;
         }
-        QPushButton:hover {
-            background-color: #F3F4F6;
+        QLabel {
+            border: none;
+            background: transparent;
         }
     )");
+    AppStyle::applyElevation(topBar, 16, 2, 15);
 
-    QLabel *pageTitle = new QLabel("Browse Catalog");
-    pageTitle->setStyleSheet("color: #172033; font-size: 20px; font-weight: 800;");
+    QHBoxLayout *layout = new QHBoxLayout(topBar);
+    layout->setContentsMargins(36, 10, 36, 10);
+    layout->setSpacing(16);
+
+    backButton = new QPushButton("← Back to Home");
+    backButton->setMinimumHeight(38);
+    backButton->setCursor(Qt::PointingHandCursor);
+    backButton->setStyleSheet(AppStyle::secondaryButtonStyle());
+
+    QLabel *pageTitle = new QLabel("Browse Book Catalog");
+    pageTitle->setStyleSheet(QString("color: %1; font-size: 20px; font-weight: 800;").arg(AppStyle::TextPrimary));
 
     layout->addWidget(backButton);
     layout->addWidget(pageTitle);
     layout->addStretch();
 
     connect(backButton, &QPushButton::clicked, this, &BrowseWindow::handleBack);
-
     return topBar;
 }
 
 QWidget* BrowseWindow::createFilterBar()
 {
     QFrame *filterBar = new QFrame();
-    filterBar->setStyleSheet(R"(
-        QFrame {
-            background-color: white;
-            border: 1px solid #E5E7EB;
-            border-radius: 14px;
-        }
-    )");
+    filterBar->setStyleSheet(AppStyle::cardStyle());
+    AppStyle::applyElevation(filterBar, 16, 4, 12);
 
     QVBoxLayout *containerLayout = new QVBoxLayout(filterBar);
-    containerLayout->setContentsMargins(24, 16, 24, 16);
-    containerLayout->setSpacing(12);
+    containerLayout->setContentsMargins(24, 20, 24, 20);
+    containerLayout->setSpacing(16);
 
+    // Search row
     QHBoxLayout *topRow = new QHBoxLayout();
-    topRow->setSpacing(12);
+    topRow->setSpacing(10);
 
     searchEdit = new QLineEdit();
-    searchEdit->setPlaceholderText("Search by title, author, or ISBN...");
-    searchEdit->setMinimumHeight(42);
-    searchEdit->setStyleSheet(R"(
-        QLineEdit {
-            background-color: #F9FAFB;
-            border: 1px solid #D1D5DB;
-            border-radius: 8px;
-            padding: 0 14px;
-            font-size: 14px;
-        }
-        QLineEdit:focus {
-            border-color: #4F46E5;
-            background-color: white;
-        }
-    )");
+    searchEdit->setPlaceholderText("Search by book title, author, or ISBN...");
+    searchEdit->setMinimumHeight(44);
+    searchEdit->setStyleSheet(AppStyle::inputStyle());
 
     searchButton = new QPushButton("Search");
-    searchButton->setMinimumHeight(42);
-    searchButton->setMinimumWidth(100);
+    searchButton->setMinimumHeight(44);
+    searchButton->setMinimumWidth(110);
     searchButton->setCursor(Qt::PointingHandCursor);
-    searchButton->setStyleSheet(R"(
-        QPushButton {
-            background-color: #4F46E5;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 700;
-        }
-        QPushButton:hover {
-            background-color: #4338CA;
-        }
-    )");
+    searchButton->setStyleSheet(AppStyle::primaryButtonStyle());
 
     topRow->addWidget(searchEdit, 1);
     topRow->addWidget(searchButton);
     containerLayout->addLayout(topRow);
 
-    QHBoxLayout *bottomRow = new QHBoxLayout();
-    bottomRow->setSpacing(12);
+    debounceTimer = new QTimer(this);
+    debounceTimer->setSingleShot(true);
+    debounceTimer->setInterval(350);
+    connect(debounceTimer, &QTimer::timeout, this, &BrowseWindow::fetchSuggestions);
+    connect(searchEdit, &QLineEdit::textChanged, this, &BrowseWindow::handleSearchTextChanged);
 
+    suggestionsList = new QListWidget(filterBar);
+    suggestionsList->setVisible(false);
+    suggestionsList->setMaximumHeight(150);
+    suggestionsList->setStyleSheet(QString(R"(
+        QListWidget {
+            background-color: #FFFFFF;
+            border: 1px solid %1;
+            border-radius: 8px;
+            padding: 4px;
+            font-size: 13px;
+            color: %2;
+        }
+        QListWidget::item {
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+        QListWidget::item:hover {
+            background-color: %3;
+            color: %4;
+        }
+    )").arg(AppStyle::BorderSubtle, AppStyle::TextPrimary, AppStyle::PrimaryLight, AppStyle::Primary));
+
+    connect(suggestionsList, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
+        if (item) {
+            searchEdit->setText(item->text());
+            suggestionsList->clear();
+            suggestionsList->setVisible(false);
+            handleSearch();
+        }
+    });
+
+    containerLayout->addWidget(suggestionsList);
+
+    // Filter row 1: Category, Condition, Sort
+    QHBoxLayout *filterRow1 = new QHBoxLayout();
+    filterRow1->setSpacing(16);
+
+    QLabel *catLbl = new QLabel("Category:");
+    catLbl->setStyleSheet(QString("color: %1; font-size: 13px; font-weight: 600;").arg(AppStyle::TextSecondary));
     categoryCombo = new QComboBox();
-    categoryCombo->setMinimumHeight(38);
-    categoryCombo->addItems({"All Categories", "Fiction", "Non-Fiction", "Academic", "Programming", "Engineering", "Competitive Exams", "School", "Novels", "Other"});
+    categoryCombo->setStyleSheet(AppStyle::comboBoxStyle());
+    categoryCombo->addItems({"All Categories", "Academic", "Programming", "Engineering", "Fiction", "Competitive Exams", "School", "Novels", "Non-Fiction", "Other"});
 
+    QLabel *condLbl = new QLabel("Condition:");
+    condLbl->setStyleSheet(QString("color: %1; font-size: 13px; font-weight: 600;").arg(AppStyle::TextSecondary));
     conditionCombo = new QComboBox();
-    conditionCombo->setMinimumHeight(38);
+    conditionCombo->setStyleSheet(AppStyle::comboBoxStyle());
     conditionCombo->addItems({"All Conditions", "New", "Like New", "Very Good", "Good", "Acceptable"});
 
+    QLabel *sortLbl = new QLabel("Sort:");
+    sortLbl->setStyleSheet(QString("color: %1; font-size: 13px; font-weight: 600;").arg(AppStyle::TextSecondary));
     sortCombo = new QComboBox();
-    sortCombo->setMinimumHeight(38);
+    sortCombo->setStyleSheet(AppStyle::comboBoxStyle());
     sortCombo->addItem("Newest First", "newest");
     sortCombo->addItem("Oldest First", "oldest");
     sortCombo->addItem("Price: Low to High", "price_asc");
     sortCombo->addItem("Price: High to Low", "price_desc");
 
-    QString comboStyle = R"(
-        QComboBox {
-            background-color: #F9FAFB;
-            border: 1px solid #D1D5DB;
-            border-radius: 8px;
-            padding: 0 12px;
-            font-size: 13px;
-            color: #374151;
-            font-weight: 600;
-            min-width: 140px;
-        }
-        QComboBox::drop-down {
-            border: none;
-        }
-    )";
-    categoryCombo->setStyleSheet(comboStyle);
-    conditionCombo->setStyleSheet(comboStyle);
-    sortCombo->setStyleSheet(comboStyle);
+    filterRow1->addWidget(catLbl);
+    filterRow1->addWidget(categoryCombo);
+    filterRow1->addSpacing(8);
+    filterRow1->addWidget(condLbl);
+    filterRow1->addWidget(conditionCombo);
+    filterRow1->addSpacing(8);
+    filterRow1->addWidget(sortLbl);
+    filterRow1->addWidget(sortCombo);
+    filterRow1->addStretch();
+    containerLayout->addLayout(filterRow1);
 
-    bottomRow->addWidget(new QLabel("Category:"));
-    bottomRow->addWidget(categoryCombo);
-    bottomRow->addSpacing(10);
-    bottomRow->addWidget(new QLabel("Condition:"));
-    bottomRow->addWidget(conditionCombo);
-    bottomRow->addSpacing(10);
-    bottomRow->addWidget(new QLabel("Sort:"));
-    bottomRow->addWidget(sortCombo);
-    bottomRow->addStretch();
+    // Filter row 2: Price range (minPrice & maxPrice) + Reset
+    QHBoxLayout *filterRow2 = new QHBoxLayout();
+    filterRow2->setSpacing(16);
 
-    containerLayout->addLayout(bottomRow);
+    QLabel *priceRangeLbl = new QLabel("Price (₹):");
+    priceRangeLbl->setStyleSheet(QString("color: %1; font-size: 13px; font-weight: 600;").arg(AppStyle::TextSecondary));
+
+    QLabel *minLbl = new QLabel("Min:");
+    minLbl->setStyleSheet(QString("color: %1; font-size: 12px;").arg(AppStyle::TextMuted));
+    minPriceSpin = new QDoubleSpinBox();
+    minPriceSpin->setRange(0, 50000);
+    minPriceSpin->setPrefix("₹");
+    minPriceSpin->setDecimals(0);
+    minPriceSpin->setSingleStep(50);
+    minPriceSpin->setStyleSheet(AppStyle::inputStyle());
+    minPriceSpin->setMinimumWidth(110);
+    minPriceSpin->setMinimumHeight(36);
+
+    QLabel *maxLbl = new QLabel("Max:");
+    maxLbl->setStyleSheet(QString("color: %1; font-size: 12px;").arg(AppStyle::TextMuted));
+    maxPriceSpin = new QDoubleSpinBox();
+    maxPriceSpin->setRange(0, 50000);
+    maxPriceSpin->setPrefix("₹");
+    maxPriceSpin->setDecimals(0);
+    maxPriceSpin->setSingleStep(50);
+    maxPriceSpin->setStyleSheet(AppStyle::inputStyle());
+    maxPriceSpin->setMinimumWidth(110);
+    maxPriceSpin->setMinimumHeight(36);
+
+    resetFilterButton = new QPushButton("Clear All Filters");
+    resetFilterButton->setCursor(Qt::PointingHandCursor);
+    resetFilterButton->setStyleSheet(AppStyle::ghostButtonStyle());
+    resetFilterButton->setMinimumHeight(36);
+
+    filterRow2->addWidget(priceRangeLbl);
+    filterRow2->addWidget(minLbl);
+    filterRow2->addWidget(minPriceSpin);
+    filterRow2->addWidget(maxLbl);
+    filterRow2->addWidget(maxPriceSpin);
+    filterRow2->addSpacing(12);
+    filterRow2->addWidget(resetFilterButton);
+    filterRow2->addStretch();
+    containerLayout->addLayout(filterRow2);
 
     connect(searchButton, &QPushButton::clicked, this, &BrowseWindow::handleSearch);
     connect(searchEdit, &QLineEdit::returnPressed, this, &BrowseWindow::handleSearch);
     connect(categoryCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &BrowseWindow::handleFilterChanged);
     connect(conditionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &BrowseWindow::handleFilterChanged);
     connect(sortCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &BrowseWindow::handleFilterChanged);
+    connect(minPriceSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &BrowseWindow::handleFilterChanged);
+    connect(maxPriceSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &BrowseWindow::handleFilterChanged);
+    connect(resetFilterButton, &QPushButton::clicked, this, &BrowseWindow::handleResetFilters);
 
     QWidget *wrapper = new QWidget();
     QVBoxLayout *wLayout = new QVBoxLayout(wrapper);
-    wLayout->setContentsMargins(32, 0, 32, 0);
+    wLayout->setContentsMargins(36, 0, 36, 0);
     wLayout->addWidget(filterBar);
-
     return wrapper;
 }
 
@@ -265,11 +313,11 @@ QWidget* BrowseWindow::createBooksSection()
 {
     QWidget *section = new QWidget();
     QVBoxLayout *layout = new QVBoxLayout(section);
-    layout->setContentsMargins(32, 0, 32, 0);
-    layout->setSpacing(14);
+    layout->setContentsMargins(36, 0, 36, 0);
+    layout->setSpacing(16);
 
-    resultLabel = new QLabel("Loading books...");
-    resultLabel->setStyleSheet("color: #4B5563; font-size: 14px; font-weight: 700;");
+    resultLabel = new QLabel("Searching available listings...");
+    resultLabel->setStyleSheet(QString("color: %1; font-size: 14px; font-weight: 700;").arg(AppStyle::TextPrimary));
     layout->addWidget(resultLabel);
 
     booksContainer = new QWidget();
@@ -285,45 +333,21 @@ QWidget* BrowseWindow::createPaginationBar()
 {
     QWidget *bar = new QWidget();
     QHBoxLayout *layout = new QHBoxLayout(bar);
-    layout->setContentsMargins(32, 10, 32, 10);
+    layout->setContentsMargins(36, 12, 36, 12);
     layout->setSpacing(16);
 
     prevPageButton = new QPushButton("← Previous Page");
     prevPageButton->setMinimumHeight(38);
     prevPageButton->setCursor(Qt::PointingHandCursor);
-    prevPageButton->setStyleSheet(R"(
-        QPushButton {
-            background-color: white;
-            border: 1px solid #D1D5DB;
-            border-radius: 8px;
-            color: #374151;
-            padding: 0 16px;
-            font-size: 13px;
-            font-weight: 700;
-        }
-        QPushButton:hover { background-color: #F3F4F6; }
-        QPushButton:disabled { color: #9CA3AF; border-color: #E5E7EB; }
-    )");
+    prevPageButton->setStyleSheet(AppStyle::secondaryButtonStyle());
 
     pageLabel = new QLabel("Page 1 of 1");
-    pageLabel->setStyleSheet("color: #374151; font-size: 13px; font-weight: 700;");
+    pageLabel->setStyleSheet(QString("color: %1; font-size: 13px; font-weight: 700;").arg(AppStyle::TextPrimary));
 
     nextPageButton = new QPushButton("Next Page →");
     nextPageButton->setMinimumHeight(38);
     nextPageButton->setCursor(Qt::PointingHandCursor);
-    nextPageButton->setStyleSheet(R"(
-        QPushButton {
-            background-color: white;
-            border: 1px solid #D1D5DB;
-            border-radius: 8px;
-            color: #374151;
-            padding: 0 16px;
-            font-size: 13px;
-            font-weight: 700;
-        }
-        QPushButton:hover { background-color: #F3F4F6; }
-        QPushButton:disabled { color: #9CA3AF; border-color: #E5E7EB; }
-    )");
+    nextPageButton->setStyleSheet(AppStyle::secondaryButtonStyle());
 
     layout->addStretch();
     layout->addWidget(prevPageButton);
@@ -342,9 +366,7 @@ void BrowseWindow::clearBooksGrid()
     if (!booksGrid) return;
     QLayoutItem *item;
     while ((item = booksGrid->takeAt(0)) != nullptr) {
-        if (item->widget()) {
-            delete item->widget();
-        }
+        if (item->widget()) delete item->widget();
         delete item;
     }
 }
@@ -369,6 +391,14 @@ void BrowseWindow::fetchBooks()
 
     if (conditionCombo && conditionCombo->currentIndex() > 0) {
         query.addQueryItem("condition", conditionCombo->currentText());
+    }
+
+    if (minPriceSpin && minPriceSpin->value() > 0.0) {
+        query.addQueryItem("minPrice", QString::number(minPriceSpin->value(), 'f', 0));
+    }
+
+    if (maxPriceSpin && maxPriceSpin->value() > 0.0) {
+        query.addQueryItem("maxPrice", QString::number(maxPriceSpin->value(), 'f', 0));
     }
 
     if (sortCombo) {
@@ -403,15 +433,15 @@ void BrowseWindow::fetchBooks()
         }
 
         if (books.isEmpty()) {
-            resultLabel->setText("No books found matching your criteria.");
-            QLabel *empty = new QLabel("No books found.\nTry broadening your search or filter.");
+            resultLabel->setText("No books match your criteria.");
+            QLabel *empty = new QLabel("No books found.\nTry broadening your search or adjusting filters.");
             empty->setAlignment(Qt::AlignCenter);
-            empty->setStyleSheet("background-color: white; border: 1px solid #E5E7EB; border-radius: 12px; color: #6B7280; font-size: 14px; padding: 40px;");
+            empty->setStyleSheet(QString("background-color: #FFFFFF; border: 1px solid %1; border-radius: 12px; color: %2; font-size: 14px; padding: 48px;").arg(AppStyle::BorderSubtle, AppStyle::TextSecondary));
             booksGrid->addWidget(empty, 0, 0, 1, 4);
             return;
         }
 
-        resultLabel->setText(QString("Showing %1 books").arg(books.size()));
+        resultLabel->setText(QString("Showing %1 book%2").arg(books.size()).arg(books.size() == 1 ? "" : "s"));
 
         const int columns = 4;
         for (int i = 0; i < books.size(); ++i) {
@@ -428,120 +458,146 @@ void BrowseWindow::fetchBooks()
 QFrame* BrowseWindow::createBookCard(const BookModel &book)
 {
     QFrame *card = new QFrame();
-    card->setMinimumHeight(355);
-    card->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    card->setStyleSheet(R"(
-        QFrame {
-            background-color: white;
-            border: 1px solid #E5E7EB;
-            border-radius: 16px;
+    card->setFixedSize(280, 410);
+    card->setObjectName("bookCard");
+    card->setStyleSheet(QString(R"(
+        QFrame#bookCard {
+            background-color: #FFFFFF;
+            border: 1px solid %1;
+            border-radius: 14px;
         }
-        QFrame:hover {
-            border-color: #C7D2FE;
-            background-color: #FEFEFF;
+        QFrame#bookCard:hover {
+            border-color: %2;
         }
-    )");
+        QLabel {
+            border: none;
+            background: transparent;
+        }
+    )").arg(AppStyle::BorderSubtle, AppStyle::PrimaryBorder));
+    AppStyle::applyElevation(card, 16, 4, 15);
 
     QVBoxLayout *layout = new QVBoxLayout(card);
-    layout->setContentsMargins(12, 12, 12, 12);
-    layout->setSpacing(7);
+    layout->setContentsMargins(14, 14, 14, 14);
+    layout->setSpacing(6);
 
-    QLabel *cover = new QLabel();
-    cover->setFixedHeight(155);
-    cover->setAlignment(Qt::AlignCenter);
-
-    bool loaded = false;
-    if (!book.coverImage.trimmed().isEmpty()) {
-        QFileInfo fi(book.coverImage);
-        if (fi.exists() && fi.isFile()) {
-            QPixmap p(book.coverImage);
-            if (!p.isNull()) {
-                cover->setPixmap(p.scaled(cover->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
-                loaded = true;
-            }
+    // Image Container - Large, prominent thumbnail
+    QFrame *imgBox = new QFrame(card);
+    imgBox->setFixedHeight(220);
+    imgBox->setStyleSheet(QString(R"(
+        QFrame {
+            background-color: %1;
+            border-radius: 10px;
         }
+    )").arg(AppStyle::SurfaceSubtle));
+
+    QVBoxLayout *imgBoxLayout = new QVBoxLayout(imgBox);
+    imgBoxLayout->setContentsMargins(6, 6, 6, 6);
+    imgBoxLayout->setSpacing(4);
+
+    // Badges Row at top of image
+    QHBoxLayout *badgesRow = new QHBoxLayout();
+    badgesRow->setSpacing(6);
+
+    QLabel *catBadge = new QLabel(book.category.isEmpty() ? "Book" : book.category, imgBox);
+    catBadge->setStyleSheet(QString(R"(
+        background-color: rgba(255, 255, 255, 0.92);
+        color: %1;
+        font-size: 11px;
+        font-weight: 700;
+        border-radius: 6px;
+        padding: 3px 8px;
+    )").arg(AppStyle::Primary));
+    badgesRow->addWidget(catBadge);
+    badgesRow->addStretch();
+
+    if (book.images.size() > 1) {
+        QLabel *mediaBadge = new QLabel(QString("📷 %1").arg(book.images.size()), imgBox);
+        mediaBadge->setStyleSheet(R"(
+            background-color: rgba(15, 23, 42, 0.75);
+            color: #FFFFFF;
+            font-size: 10px;
+            font-weight: 700;
+            border-radius: 6px;
+            padding: 3px 6px;
+        )");
+        badgesRow->addWidget(mediaBadge);
     }
-
-    if (!loaded) {
-        // Procedural gradient book cover
-        QPixmap pix(130, 155);
-        pix.fill(Qt::transparent);
-        QPainter painter(&pix);
-        painter.setRenderHint(QPainter::Antialiasing);
-
-        QLinearGradient grad(0, 0, 130, 155);
-        grad.setColorAt(0, QColor(79, 70, 229));
-        grad.setColorAt(1, QColor(124, 58, 237));
-        painter.setBrush(grad);
-        painter.setPen(Qt::NoPen);
-        painter.drawRoundedRect(0, 0, 130, 155, 8, 8);
-
-        painter.setPen(Qt::white);
-        QFont f("Segoe UI", 9, QFont::Bold);
-        painter.setFont(f);
-        painter.drawText(QRect(8, 20, 114, 70), Qt::AlignCenter | Qt::TextWordWrap, book.title);
-
-        QFont f2("Segoe UI", 8);
-        painter.setFont(f2);
-        painter.drawText(QRect(8, 100, 114, 30), Qt::AlignCenter | Qt::TextWordWrap, book.author);
-
-        painter.end();
-        cover->setPixmap(pix);
+    if (!book.videoUrl.trimmed().isEmpty()) {
+        QLabel *vidBadge = new QLabel("🎥 Video", imgBox);
+        vidBadge->setStyleSheet(R"(
+            background-color: rgba(220, 38, 38, 0.9);
+            color: #FFFFFF;
+            font-size: 10px;
+            font-weight: 700;
+            border-radius: 6px;
+            padding: 3px 6px;
+        )");
+        badgesRow->addWidget(vidBadge);
     }
-    layout->addWidget(cover);
+    imgBoxLayout->addLayout(badgesRow);
 
-    QLabel *titleLabel = new QLabel(book.title);
+    // Cover image - Large thumbnail filling box
+    QLabel *cover = new QLabel(imgBox);
+    cover->setFixedHeight(175);
+    cover->setAlignment(Qt::AlignCenter);
+    ImageLoader::instance().load(book.coverImage, cover, QSize(220, 175), book.title, book.author);
+    imgBoxLayout->addWidget(cover, 1);
+
+    layout->addWidget(imgBox);
+
+    // Title
+    QLabel *titleLabel = new QLabel(book.title, card);
     titleLabel->setWordWrap(true);
-    titleLabel->setMaximumHeight(42);
-    titleLabel->setStyleSheet("color: #172033; font-size: 14px; font-weight: 800;");
+    titleLabel->setFixedHeight(36);
+    titleLabel->setStyleSheet(QString("color: %1; font-size: 13.5px; font-weight: 700; line-height: 1.2;").arg(AppStyle::TextPrimary));
     layout->addWidget(titleLabel);
 
-    QLabel *authorLabel = new QLabel("by " + (book.author.isEmpty() ? "Unknown" : book.author));
-    authorLabel->setStyleSheet("color: #6B7280; font-size: 11px;");
+    // Author
+    QLabel *authorLabel = new QLabel("by " + (book.author.isEmpty() ? "Unknown" : book.author), card);
+    authorLabel->setStyleSheet(QString("color: %1; font-size: 11.5px;").arg(AppStyle::TextSecondary));
     layout->addWidget(authorLabel);
 
-    QLabel *conditionLabel = new QLabel(book.condition.isEmpty() ? "Good" : book.condition);
-    conditionLabel->setAlignment(Qt::AlignCenter);
-    conditionLabel->setMaximumWidth(90);
-    conditionLabel->setStyleSheet(R"(
-        QLabel {
-            background-color: #ECFDF5;
-            color: #047857;
-            border-radius: 6px;
-            padding: 4px 8px;
-            font-size: 10px;
-            font-weight: 800;
-        }
-    )");
-    layout->addWidget(conditionLabel, 0, Qt::AlignLeft);
+    // Ratings & Condition row
+    QHBoxLayout *ratingRow = new QHBoxLayout();
+    ratingRow->setSpacing(6);
 
-    QLabel *catLabel = new QLabel("Category  •  " + (book.category.isEmpty() ? "General" : book.category));
-    catLabel->setStyleSheet("color: #9CA3AF; font-size: 10px;");
-    layout->addWidget(catLabel);
+    QLabel *ratingLabel = new QLabel(card);
+    if (book.reviewCount > 0) {
+        ratingLabel->setText(QString("★ %1 (%2)").arg(QString::number(book.averageRating, 'f', 1)).arg(book.reviewCount));
+        ratingLabel->setStyleSheet("color: #D97706; font-size: 11.5px; font-weight: 700;");
+    } else {
+        ratingLabel->setText("★ New");
+        ratingLabel->setStyleSheet(QString("color: %1; font-size: 11.5px;").arg(AppStyle::TextMuted));
+    }
+    ratingRow->addWidget(ratingLabel);
 
-    layout->addStretch();
+    QLabel *dot = new QLabel("•", card);
+    dot->setStyleSheet(QString("color: %1; font-size: 11.5px;").arg(AppStyle::TextMuted));
+    ratingRow->addWidget(dot);
 
+    QLabel *condLabel = new QLabel(book.condition.isEmpty() ? "Good" : book.condition, card);
+    condLabel->setStyleSheet(AppStyle::statusBadgeStyle(book.condition.isEmpty() ? "AVAILABLE" : book.condition));
+    ratingRow->addWidget(condLabel);
+
+    ratingRow->addStretch();
+    layout->addLayout(ratingRow);
+
+    layout->addSpacing(4);
+
+    // Price & Action Button row
     QHBoxLayout *bottom = new QHBoxLayout();
-    QLabel *priceLabel = new QLabel(QString("₹%1").arg(book.price, 0, 'f', 0));
-    priceLabel->setStyleSheet("color: #111827; font-size: 18px; font-weight: 900;");
+    bottom->setSpacing(8);
+
+    QLabel *priceLabel = new QLabel(QString("₹%1").arg(book.price, 0, 'f', 0), card);
+    priceLabel->setStyleSheet(QString("color: %1; font-size: 19px; font-weight: 900;").arg(AppStyle::Primary));
     bottom->addWidget(priceLabel);
     bottom->addStretch();
 
-    QPushButton *viewButton = new QPushButton("View Book");
+    QPushButton *viewButton = new QPushButton("View Details", card);
     viewButton->setMinimumHeight(34);
+    viewButton->setMinimumWidth(100);
     viewButton->setCursor(Qt::PointingHandCursor);
-    viewButton->setStyleSheet(R"(
-        QPushButton {
-            background-color: #4F46E5;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 0 13px;
-            font-size: 11px;
-            font-weight: 800;
-        }
-        QPushButton:hover { background-color: #4338CA; }
-    )");
+    viewButton->setStyleSheet(AppStyle::primaryButtonStyle());
 
     const QString bId = book.id;
     connect(viewButton, &QPushButton::clicked, this, [this, bId]() {
@@ -554,14 +610,97 @@ QFrame* BrowseWindow::createBookCard(const BookModel &book)
     return card;
 }
 
+
+void BrowseWindow::handleSearchTextChanged(const QString &text)
+{
+    if (text.trimmed().isEmpty()) {
+        if (debounceTimer) debounceTimer->stop();
+        if (suggestionsList) {
+            suggestionsList->clear();
+            suggestionsList->setVisible(false);
+        }
+        return;
+    }
+
+    if (debounceTimer) {
+        debounceTimer->start();
+    }
+}
+
+void BrowseWindow::fetchSuggestions()
+{
+    const QString text = searchEdit ? searchEdit->text().trimmed() : QString();
+    if (text.isEmpty() || !suggestionsList) {
+        if (suggestionsList) suggestionsList->setVisible(false);
+        return;
+    }
+
+    QUrlQuery query;
+    query.addQueryItem("q", text);
+    query.addQueryItem("limit", "5");
+
+    auto *reply = ApiClient::instance().getPublic(QStringLiteral("/api/books/suggestions"), query);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, text]() {
+        auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
+        reply->deleteLater();
+
+        if (!ok || !suggestionsList) return;
+
+        // Verify query text still matches what user typed
+        if (searchEdit && searchEdit->text().trimmed() != text) return;
+
+        suggestionsList->clear();
+        if (json.contains(QStringLiteral("suggestions")) && json[QStringLiteral("suggestions")].isArray()) {
+            const auto arr = json[QStringLiteral("suggestions")].toArray();
+            for (const auto &val : arr) {
+                suggestionsList->addItem(val.toString());
+            }
+        }
+
+        suggestionsList->setVisible(suggestionsList->count() > 0);
+    });
+}
+
+void BrowseWindow::handleSuggestionSelected(int row)
+{
+    if (!suggestionsList || row < 0 || row >= suggestionsList->count()) return;
+    QListWidgetItem *item = suggestionsList->item(row);
+    if (item && searchEdit) {
+        searchEdit->setText(item->text());
+        suggestionsList->clear();
+        suggestionsList->setVisible(false);
+        handleSearch();
+    }
+}
+
 void BrowseWindow::handleSearch()
 {
+    if (suggestionsList) {
+        suggestionsList->clear();
+        suggestionsList->setVisible(false);
+    }
     currentPage = 1;
     fetchBooks();
 }
 
 void BrowseWindow::handleFilterChanged()
 {
+    currentPage = 1;
+    fetchBooks();
+}
+
+void BrowseWindow::handleResetFilters()
+{
+    if (suggestionsList) {
+        suggestionsList->clear();
+        suggestionsList->setVisible(false);
+    }
+    if (searchEdit) searchEdit->clear();
+    if (categoryCombo) categoryCombo->setCurrentIndex(0);
+    if (conditionCombo) conditionCombo->setCurrentIndex(0);
+    if (sortCombo) sortCombo->setCurrentIndex(0);
+    if (minPriceSpin) minPriceSpin->setValue(0);
+    if (maxPriceSpin) maxPriceSpin->setValue(0);
     currentPage = 1;
     fetchBooks();
 }

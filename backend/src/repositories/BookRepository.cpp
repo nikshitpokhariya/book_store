@@ -12,6 +12,7 @@
 
 #include <cmath>
 #include <stdexcept>
+#include <unordered_set>
 
 using bsoncxx::builder::basic::array;
 using bsoncxx::builder::basic::document;
@@ -69,6 +70,18 @@ Book toBook(const bsoncxx::document::view &view) {
   book.price = getDouble(view, "price");
   book.condition = getString(view, "condition");
   book.coverImage = getString(view, "coverImage");
+  if (view["images"] && view["images"].type() == bsoncxx::type::k_array) {
+    for (const auto &item : view["images"].get_array().value) {
+      if (item.type() == bsoncxx::type::k_string) {
+        book.images.emplace_back(item.get_string().value.data(),
+                                 item.get_string().value.size());
+      }
+    }
+  }
+  if (book.images.empty() && !book.coverImage.empty()) {
+    book.images.push_back(book.coverImage);
+  }
+  book.videoUrl = getString(view, "videoUrl");
   book.status = getString(view, "status");
   if (book.status.empty()) {
     book.status = "available";
@@ -112,6 +125,12 @@ std::string BookRepository::create(const Book &book) {
   doc.append(kvp("price", book.price));
   doc.append(kvp("condition", book.condition));
   doc.append(kvp("coverImage", book.coverImage));
+  array imagesArr;
+  for (const auto &img : book.images) {
+    imagesArr.append(img);
+  }
+  doc.append(kvp("images", imagesArr.view()));
+  doc.append(kvp("videoUrl", book.videoUrl));
   doc.append(kvp("status", book.status.empty() ? "available" : book.status));
   doc.append(kvp("averageRating", book.averageRating));
   doc.append(kvp("reviewCount", book.reviewCount));
@@ -309,6 +328,16 @@ bool BookRepository::update(const std::string &id, const BookUpdate &update) {
   }
   if (update.coverImage) {
     setFields.append(kvp("coverImage", *update.coverImage));
+  }
+  if (update.images) {
+    array imagesArr;
+    for (const auto &img : *update.images) {
+      imagesArr.append(img);
+    }
+    setFields.append(kvp("images", imagesArr.view()));
+  }
+  if (update.videoUrl) {
+    setFields.append(kvp("videoUrl", *update.videoUrl));
   }
 
   setFields.append(
@@ -542,6 +571,60 @@ bool BookRepository::markReturned(const std::string &bookId) {
   auto res = collection.update_one(filter.view(),
                                    make_document(kvp("$set", setDoc.view())));
   return res && res->modified_count() > 0;
+}
+
+bool BookRepository::existsByOwnerAndTitle(const std::string &ownerId,
+                                           const std::string &title) {
+  if (ownerId.empty() || title.empty()) {
+    return false;
+  }
+  auto collection = MongoDatabase::instance().database()["books"];
+  document filter;
+  filter.append(kvp("ownerId", ownerId));
+  filter.append(kvp("title", bsoncxx::types::b_regex{"^" + escapeRegex(title) + "$", "i"}));
+  filter.append(kvp("status", make_document(kvp("$ne", "deleted"))));
+  return collection.count_documents(filter.view()) > 0;
+}
+
+std::vector<std::string> BookRepository::findSuggestions(const std::string &query, int limit) {
+  std::vector<std::string> suggestions;
+  if (query.empty() || limit <= 0) {
+    return suggestions;
+  }
+
+  auto collection = MongoDatabase::instance().database()["books"];
+  document filterDoc;
+  filterDoc.append(kvp("status", "available"));
+
+  const auto escaped = escapeRegex(query);
+  bsoncxx::types::b_regex searchRegex{escaped, "i"};
+
+  array orClauses;
+  orClauses.append(make_document(kvp("title", searchRegex)));
+  orClauses.append(make_document(kvp("author", searchRegex)));
+  filterDoc.append(kvp("$or", orClauses.view()));
+
+  mongocxx::options::find options;
+  options.limit(static_cast<std::int64_t>(limit * 3));
+
+  document sortDoc;
+  sortDoc.append(kvp("createdAt", -1));
+  options.sort(sortDoc.view());
+
+  auto cursor = collection.find(filterDoc.view(), options);
+  std::unordered_set<std::string> seen;
+
+  for (const auto &docView : cursor) {
+    std::string title = getString(docView, "title");
+    if (!title.empty() && seen.find(title) == seen.end()) {
+      seen.insert(title);
+      suggestions.push_back(title);
+      if (static_cast<int>(suggestions.size()) >= limit) {
+        break;
+      }
+    }
+  }
+  return suggestions;
 }
 
 

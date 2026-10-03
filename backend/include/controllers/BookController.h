@@ -14,6 +14,8 @@ public:
   ADD_METHOD_TO(BookController::getMyListings, "/api/books/my", drogon::Get,
                 "AuthFilter");
 
+  ADD_METHOD_TO(BookController::suggestions, "/api/books/suggestions", drogon::Get);
+
   ADD_METHOD_TO(BookController::getById, "/api/books/{1}", drogon::Get);
 
   ADD_METHOD_TO(BookController::updateListing, "/api/books/{1}", drogon::Put,
@@ -30,6 +32,10 @@ public:
 
   void browse(const drogon::HttpRequestPtr &req,
               std::function<void(const drogon::HttpResponsePtr &)> &&callback);
+
+  void suggestions(
+      const drogon::HttpRequestPtr &req,
+      std::function<void(const drogon::HttpResponsePtr &)> &&callback);
 
   void getMyListings(
       const drogon::HttpRequestPtr &req,

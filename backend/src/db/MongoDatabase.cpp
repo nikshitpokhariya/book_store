@@ -60,8 +60,6 @@ void MongoDatabase::ensureIndexes() {
     sessions.create_index(make_document(kvp("expiresAt", 1)), options);
   }
 
-  auto books = db["books"];
-
   // Index for browsing available books by creation date
   {
     books.create_index(make_document(kvp("status", 1), kvp("createdAt", -1)));

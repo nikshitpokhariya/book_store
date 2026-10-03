@@ -15,6 +15,7 @@ public:
 
 signals:
     void signupSuccessful();
+    void backRequested();
 
 private slots:
     void handleSignup();

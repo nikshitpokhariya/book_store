@@ -16,13 +16,20 @@ public:
 
   Review createReview(const std::string &userId, const std::string &orderId,
                       const std::string &bookId, int rating,
-                      const std::string &comment);
+                      const std::string &comment,
+                      const std::vector<std::string> &images = {});
 
   PageResult<Review> getBookReviews(const std::string &bookId, int page,
                                    int limit);
 
+  PageResult<Review> getSellerReviews(const std::string &sellerId, int page,
+                                      int limit);
+
+  std::pair<double, int> getSellerRating(const std::string &sellerId);
+
   PageResult<Review> getMyReviews(const std::string &userId, int page,
                                   int limit);
+
 
   Review updateReview(const std::string &reviewId, const std::string &userId,
                       int rating, const std::string &comment);

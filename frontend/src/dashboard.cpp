@@ -8,7 +8,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QFont>
-#include <QMessageBox>
+#include "StyledMessageBox.h"
 
 
 // =========================================================
@@ -377,7 +377,7 @@ void Dashboard::openSellBooks()
 {
     if (userName.isEmpty())
     {
-        QMessageBox::warning(
+        StyledMessageBox::warning(
             this,
             "Error",
             "User information is not available."
@@ -512,7 +512,7 @@ void Dashboard::closeBrowseWindow()
 
 void Dashboard::openProfile()
 {
-    QMessageBox::information(
+    StyledMessageBox::information(
         this,
         "My Profile",
         "Profile module will be added here."

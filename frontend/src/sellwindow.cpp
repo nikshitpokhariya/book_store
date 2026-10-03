@@ -1,1449 +1,755 @@
 #include "sellwindow.h"
-#include "database.h"
+#include "AppStyle.h"
+#include "StyledMessageBox.h"
 #include "network/ApiClient.h"
-#include <QJsonObject>
-#include <QNetworkReply>
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGridLayout>
-#include <QFormLayout>
-
 #include <QLabel>
 #include <QLineEdit>
 #include <QTextEdit>
 #include <QComboBox>
 #include <QPushButton>
 #include <QFileDialog>
-#include <QMessageBox>
 #include <QFrame>
 #include <QScrollArea>
-#include <QSpacerItem>
-
 #include <QPixmap>
 #include <QFile>
 #include <QFileInfo>
 #include <QDir>
 #include <QStandardPaths>
 #include <QDateTime>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QNetworkReply>
 
-#include <QDoubleValidator>
+namespace {
+const QStringList SLOT_TITLES = {
+    QStringLiteral("Cover (Required)"),
+    QStringLiteral("Back Cover (Required)"),
+    QStringLiteral("Spine / Angle (Required)"),
+    QStringLiteral("Sample Page (Required)"),
+    QStringLiteral("Extra Photo 1 (Optional)"),
+    QStringLiteral("Extra Photo 2 (Optional)")
+};
+}
 
-
-// =========================================================
-// CONSTRUCTOR
-// =========================================================
-
-SellWindow::SellWindow(
-    const QString &sellerName,
-    QWidget *parent
-    )
+SellWindow::SellWindow(const QString &sellerName, QWidget *parent)
     : QWidget(parent),
-    sellerName(sellerName),
-    titleEdit(nullptr),
-    authorEdit(nullptr),
-    isbnEdit(nullptr),
-    categoryCombo(nullptr),
-    conditionCombo(nullptr),
-    priceEdit(nullptr),
-    descriptionEdit(nullptr),
-    locationEdit(nullptr),
-    imagePreview(nullptr),
-    imagePathLabel(nullptr),
-    chooseImageButton(nullptr),
-    sellButton(nullptr),
-    backButton(nullptr)
+      sellerName(sellerName),
+      titleEdit(nullptr),
+      authorEdit(nullptr),
+      isbnEdit(nullptr),
+      categoryCombo(nullptr),
+      conditionCombo(nullptr),
+      priceEdit(nullptr),
+      descriptionEdit(nullptr),
+      photoCountBadge(nullptr),
+      videoCard(nullptr),
+      videoStatusLabel(nullptr),
+      chooseVideoBtn(nullptr),
+      removeVideoBtn(nullptr),
+      chooseAllImagesBtn(nullptr),
+      sellButton(nullptr),
+      backButton(nullptr)
 {
     setWindowTitle("BookBazzar - Sell Your Book");
-
-    resize(1200, 800);
-
-    setMinimumSize(950, 650);
+    resize(1200, 860);
+    setMinimumSize(980, 680);
+    setStyleSheet(QString("background-color: %1;").arg(AppStyle::Background));
 
     setupUI();
 }
-
-
-// =========================================================
-// DESTRUCTOR
-// =========================================================
 
 SellWindow::~SellWindow()
 {
 }
 
-
-// =========================================================
-// SETUP UI
-// =========================================================
-
 void SellWindow::setupUI()
 {
-    // =====================================================
-    // GLOBAL STYLE
-    // =====================================================
+    QVBoxLayout *rootLayout = new QVBoxLayout(this);
+    rootLayout->setContentsMargins(0, 0, 0, 0);
+    rootLayout->setSpacing(0);
 
-    setStyleSheet(R"(
-
-        QWidget {
-            font-family: "Segoe UI";
-            background-color: #F5F7FB;
-            color: #172033;
-        }
-
-        QScrollArea {
-            border: none;
-            background-color: #F5F7FB;
-        }
-
-        QScrollBar:vertical {
-            background: #EEF1F6;
-            width: 9px;
-            margin: 4px;
-            border-radius: 4px;
-        }
-
-        QScrollBar::handle:vertical {
-            background: #C7CEDB;
-            min-height: 40px;
-            border-radius: 4px;
-        }
-
-        QScrollBar::handle:vertical:hover {
-            background: #AEB7C7;
-        }
-
-        QScrollBar::add-line:vertical,
-        QScrollBar::sub-line:vertical {
-            height: 0px;
-        }
-
-        QLabel {
-            background: transparent;
-        }
-
-        QLineEdit,
-        QTextEdit,
-        QComboBox {
-
-            background-color: #FFFFFF;
-
-            color: #172033;
-
-            border: 1px solid #D9DEE8;
-
-            border-radius: 9px;
-
-            font-size: 14px;
-        }
-
-        QLineEdit {
-
-            min-height: 44px;
-
-            padding-left: 13px;
-            padding-right: 13px;
-        }
-
-        QTextEdit {
-
-            padding: 10px 12px;
-
-            min-height: 110px;
-        }
-
-        QComboBox {
-
-            min-height: 44px;
-
-            padding-left: 13px;
-            padding-right: 13px;
-        }
-
-        QComboBox::drop-down {
-
-            border: none;
-
-            width: 35px;
-        }
-
-        QComboBox QAbstractItemView {
-
-            background-color: white;
-
-            color: #172033;
-
-            border: 1px solid #D9DEE8;
-
-            selection-background-color: #EEF2FF;
-
-            selection-color: #4F46E5;
-        }
-
-        QLineEdit:focus,
-        QTextEdit:focus,
-        QComboBox:focus {
-
-            border: 2px solid #6366F1;
-
-            background-color: #FFFFFF;
-        }
-
-        QPushButton {
-
-            border-radius: 9px;
-
-            font-size: 14px;
-
-            font-weight: 700;
-
-            min-height: 44px;
-
-            padding-left: 18px;
-            padding-right: 18px;
-        }
-
-    )");
-
-
-    // =====================================================
-    // MAIN WINDOW LAYOUT
-    // =====================================================
-
-    QVBoxLayout *outerLayout =
-        new QVBoxLayout(this);
-
-    outerLayout->setContentsMargins(
-        0, 0, 0, 0
-        );
-
-    outerLayout->setSpacing(0);
-
-
-    // =====================================================
-    // HEADER
-    // =====================================================
-
-    QFrame *header =
-        new QFrame();
-
-    header->setFixedHeight(82);
-
-    header->setStyleSheet(R"(
+    // ==========================================
+    // Top Bar
+    // ==========================================
+    QFrame *topBar = new QFrame(this);
+    topBar->setFixedHeight(72);
+    topBar->setStyleSheet(QString(R"(
         QFrame {
             background-color: #FFFFFF;
-            border-bottom: 1px solid #E5E7EB;
+            border-bottom: 1px solid %1;
         }
-    )");
+    )").arg(AppStyle::BorderSubtle));
 
+    QHBoxLayout *topLayout = new QHBoxLayout(topBar);
+    topLayout->setContentsMargins(32, 0, 32, 0);
+    topLayout->setSpacing(16);
 
-    QHBoxLayout *headerLayout =
-        new QHBoxLayout(header);
+    backButton = new QPushButton("← Back to Dashboard", topBar);
+    backButton->setCursor(Qt::PointingHandCursor);
+    backButton->setStyleSheet(AppStyle::secondaryButtonStyle());
+    backButton->setFixedHeight(40);
+    connect(backButton, &QPushButton::clicked, this, &SellWindow::handleBack);
 
-    headerLayout->setContentsMargins(
-        35, 0, 35, 0
-        );
+    QLabel *pageTitle = new QLabel("List a Book for Sale", topBar);
+    pageTitle->setStyleSheet(QString("color: %1; font-size: 20px; font-weight: 700;").arg(AppStyle::TextPrimary));
 
+    topLayout->addWidget(backButton);
+    topLayout->addWidget(pageTitle);
+    topLayout->addStretch();
 
-    // Logo
-    QLabel *logo =
-        new QLabel("BookBazzar");
+    rootLayout->addWidget(topBar);
 
-    logo->setStyleSheet(R"(
-        QLabel {
-            color: #4F46E5;
-            font-size: 24px;
-            font-weight: 800;
+    // ==========================================
+    // Scroll Area for Content
+    // ==========================================
+    QScrollArea *scrollArea = new QScrollArea(this);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setStyleSheet(QString(R"(
+        QScrollArea {
+            background-color: %1;
+            border: none;
         }
-    )");
+        %2
+    )").arg(AppStyle::Background, AppStyle::scrollBarStyle()));
 
-    headerLayout->addWidget(logo);
+    QWidget *content = new QWidget();
+    content->setStyleSheet(QString("background-color: %1;").arg(AppStyle::Background));
+    QHBoxLayout *contentLayout = new QHBoxLayout(content);
+    contentLayout->setContentsMargins(36, 28, 36, 40);
+    contentLayout->setSpacing(28);
 
-
-    // Separator
-    QFrame *separator =
-        new QFrame();
-
-    separator->setFrameShape(QFrame::VLine);
-
-    separator->setStyleSheet(
-        "color: #E5E7EB;"
-        );
-
-    headerLayout->addSpacing(18);
-
-    headerLayout->addWidget(separator);
-
-    headerLayout->addSpacing(18);
-
-
-    // Page title
-    QLabel *pageTitle =
-        new QLabel("Sell Your Book");
-
-    pageTitle->setStyleSheet(R"(
-        QLabel {
-            color: #172033;
-            font-size: 19px;
-            font-weight: 700;
+    // ==========================================
+    // Left Column: Book Details Form Card
+    // ==========================================
+    QFrame *formCard = new QFrame(content);
+    formCard->setStyleSheet(QString(R"(
+        QFrame#formCard {
+            background-color: #FFFFFF;
+            border: 1px solid %1;
+            border-radius: 16px;
         }
-    )");
-
-    headerLayout->addWidget(pageTitle);
-
-    headerLayout->addStretch();
-
-
-    // Seller
-    QLabel *sellerLabel =
-        new QLabel(
-            "Seller: " + sellerName
-            );
-
-    sellerLabel->setStyleSheet(R"(
         QLabel {
-            color: #64748B;
+            color: %2;
             font-size: 13px;
             font-weight: 600;
         }
-    )");
+    )").arg(AppStyle::BorderSubtle, AppStyle::TextSecondary));
+    formCard->setObjectName("formCard");
+    AppStyle::applyElevation(formCard, 16, 4, 15);
 
-    headerLayout->addWidget(sellerLabel);
+    QVBoxLayout *formLayout = new QVBoxLayout(formCard);
+    formLayout->setContentsMargins(28, 28, 28, 28);
+    formLayout->setSpacing(14);
 
-
-    headerLayout->addSpacing(20);
-
-
-    // Back button
-    backButton =
-        new QPushButton("←  Back");
-
-    backButton->setFixedHeight(40);
-
-    backButton->setStyleSheet(R"(
-        QPushButton {
-            background-color: #FFFFFF;
-            color: #475569;
-            border: 1px solid #D9DEE8;
-        }
-
-        QPushButton:hover {
-            background-color: #F8FAFC;
-            color: #4F46E5;
-            border-color: #A5B4FC;
-        }
-
-        QPushButton:pressed {
-            background-color: #EEF2FF;
-        }
-    )");
-
-    headerLayout->addWidget(backButton);
-
-
-    outerLayout->addWidget(header);
-
-
-    // =====================================================
-    // SCROLL AREA
-    // =====================================================
-
-    QScrollArea *scrollArea =
-        new QScrollArea();
-
-    scrollArea->setWidgetResizable(true);
-
-    scrollArea->setHorizontalScrollBarPolicy(
-        Qt::ScrollBarAlwaysOff
-        );
-
-
-    QWidget *scrollContent =
-        new QWidget();
-
-    scrollContent->setStyleSheet(
-        "background-color: #F5F7FB;"
-        );
-
-
-    QVBoxLayout *mainLayout =
-        new QVBoxLayout(scrollContent);
-
-    mainLayout->setContentsMargins(
-        35, 30, 35, 40
-        );
-
-    mainLayout->setSpacing(22);
-
-
-    // =====================================================
-    // INTRODUCTION
-    // =====================================================
-
-    QLabel *heading =
-        new QLabel("List a book for sale");
-
-    heading->setStyleSheet(R"(
-        QLabel {
-            font-size: 28px;
-            font-weight: 800;
-            color: #172033;
-        }
-    )");
-
-    mainLayout->addWidget(heading);
-
-
-    QLabel *subtitle =
-        new QLabel(
-            "Provide accurate details about your book to help buyers "
-            "find and purchase it easily."
-            );
-
-    subtitle->setStyleSheet(R"(
-        QLabel {
-            color: #64748B;
-            font-size: 14px;
-        }
-    )");
-
-    mainLayout->addWidget(subtitle);
-
-
-    // =====================================================
-    // MAIN CONTENT
-    // =====================================================
-
-    QHBoxLayout *contentLayout =
-        new QHBoxLayout();
-
-    contentLayout->setSpacing(24);
-
-
-    // =====================================================
-    // LEFT CARD
-    // =====================================================
-
-    QFrame *detailsCard =
-        new QFrame();
-
-    detailsCard->setStyleSheet(R"(
-        QFrame {
-            background-color: #FFFFFF;
-            border: 1px solid #E3E7EF;
-            border-radius: 16px;
-        }
-    )");
-
-
-    QVBoxLayout *detailsLayout =
-        new QVBoxLayout(detailsCard);
-
-    detailsLayout->setContentsMargins(
-        25, 25, 25, 25
-        );
-
-    detailsLayout->setSpacing(20);
-
-
-    // =====================================================
-    // SECTION HEADER
-    // =====================================================
-
-    QHBoxLayout *detailsHeader =
-        new QHBoxLayout();
-
-
-    QLabel *detailsTitle =
-        new QLabel("Book Details");
-
-    detailsTitle->setStyleSheet(R"(
-        QLabel {
-            font-size: 19px;
-            font-weight: 800;
-            color: #172033;
-        }
-    )");
-
-    detailsHeader->addWidget(detailsTitle);
-
-    detailsHeader->addStretch();
-
-
-    QLabel *requiredLabel =
-        new QLabel("* Required");
-
-    requiredLabel->setStyleSheet(R"(
-        QLabel {
-            color: #EF4444;
-            font-size: 12px;
-            font-weight: 600;
-        }
-    )");
-
-    detailsHeader->addWidget(requiredLabel);
-
-    detailsLayout->addLayout(detailsHeader);
-
-
-    // =====================================================
-    // TITLE + AUTHOR
-    // =====================================================
-
-    QHBoxLayout *row1 =
-        new QHBoxLayout();
-
-    row1->setSpacing(15);
-
+    QLabel *formHeading = new QLabel("Book Information", formCard);
+    formHeading->setStyleSheet(QString("color: %1; font-size: 18px; font-weight: 700; margin-bottom: 6px;").arg(AppStyle::TextPrimary));
+    formLayout->addWidget(formHeading);
 
     // Title
-    QVBoxLayout *titleLayout =
-        new QVBoxLayout();
-
-    QLabel *titleLabel =
-        new QLabel("Book Title *");
-
-    titleLabel->setStyleSheet(
-        "font-size: 13px; font-weight: 700; color: #374151;"
-        );
-
-    titleEdit =
-        new QLineEdit();
-
-    titleEdit->setPlaceholderText(
-        "e.g. The C++ Programming Language"
-        );
-
-    titleLayout->addWidget(titleLabel);
-    titleLayout->addWidget(titleEdit);
-
+    formLayout->addWidget(new QLabel("Title *", formCard));
+    titleEdit = new QLineEdit(formCard);
+    titleEdit->setPlaceholderText("e.g. Clean Code, Introduction to Algorithms");
+    titleEdit->setStyleSheet(AppStyle::inputStyle());
+    formLayout->addWidget(titleEdit);
 
     // Author
-    QVBoxLayout *authorLayout =
-        new QVBoxLayout();
-
-    QLabel *authorLabel =
-        new QLabel("Author *");
-
-    authorLabel->setStyleSheet(
-        "font-size: 13px; font-weight: 700; color: #374151;"
-        );
-
-    authorEdit =
-        new QLineEdit();
-
-    authorEdit->setPlaceholderText(
-        "e.g. Bjarne Stroustrup"
-        );
-
-    authorLayout->addWidget(authorLabel);
-    authorLayout->addWidget(authorEdit);
-
-
-    row1->addLayout(titleLayout, 1);
-    row1->addLayout(authorLayout, 1);
-
-    detailsLayout->addLayout(row1);
-
-
-    // =====================================================
-    // ISBN
-    // =====================================================
-
-    QLabel *isbnLabel =
-        new QLabel("ISBN");
-
-    isbnLabel->setStyleSheet(
-        "font-size: 13px; font-weight: 700; color: #374151;"
-        );
-
-    isbnEdit =
-        new QLineEdit();
-
-    isbnEdit->setPlaceholderText(
-        "Optional ISBN number"
-        );
-
-    detailsLayout->addWidget(isbnLabel);
-    detailsLayout->addWidget(isbnEdit);
-
-
-    // =====================================================
-    // CATEGORY + CONDITION
-    // =====================================================
-
-    QHBoxLayout *row2 =
-        new QHBoxLayout();
-
-    row2->setSpacing(15);
-
-
-    // Category
-    QVBoxLayout *categoryLayout =
-        new QVBoxLayout();
-
-    QLabel *categoryLabel =
-        new QLabel("Category *");
-
-    categoryLabel->setStyleSheet(
-        "font-size: 13px; font-weight: 700; color: #374151;"
-        );
-
-    categoryCombo =
-        new QComboBox();
-
-    categoryCombo->addItem("Academic");
-    categoryCombo->addItem("Programming");
-    categoryCombo->addItem("Engineering");
-    categoryCombo->addItem("Fiction");
-    categoryCombo->addItem("Competitive Exams");
-    categoryCombo->addItem("School");
-    categoryCombo->addItem("Novels");
-
-    categoryLayout->addWidget(categoryLabel);
-    categoryLayout->addWidget(categoryCombo);
-
-
-    // Condition
-    QVBoxLayout *conditionLayout =
-        new QVBoxLayout();
-
-    QLabel *conditionLabel =
-        new QLabel("Condition *");
-
-    conditionLabel->setStyleSheet(
-        "font-size: 13px; font-weight: 700; color: #374151;"
-        );
-
-    conditionCombo =
-        new QComboBox();
-
-    conditionCombo->addItem("New");
-    conditionCombo->addItem("Like New");
-    conditionCombo->addItem("Good");
-    conditionCombo->addItem("Fair");
-    conditionCombo->addItem("Used");
-
-    conditionLayout->addWidget(conditionLabel);
-    conditionLayout->addWidget(conditionCombo);
-
-
-    row2->addLayout(categoryLayout, 1);
-    row2->addLayout(conditionLayout, 1);
-
-    detailsLayout->addLayout(row2);
-
-
-    // =====================================================
-    // PRICE + LOCATION
-    // =====================================================
-
-    QHBoxLayout *row3 =
-        new QHBoxLayout();
-
-    row3->setSpacing(15);
-
-
-    // Price
-    QVBoxLayout *priceLayout =
-        new QVBoxLayout();
-
-    QLabel *priceLabel =
-        new QLabel("Selling Price *");
-
-    priceLabel->setStyleSheet(
-        "font-size: 13px; font-weight: 700; color: #374151;"
-        );
-
-    priceEdit =
-        new QLineEdit();
-
-    priceEdit->setPlaceholderText(
-        "₹ Enter price"
-        );
-
-
-    QDoubleValidator *priceValidator =
-        new QDoubleValidator(
-            0.0,
-            10000000.0,
-            2,
-            this
-            );
-
-    priceValidator->setNotation(
-        QDoubleValidator::StandardNotation
-        );
-
-    priceEdit->setValidator(
-        priceValidator
-        );
-
-
-    priceLayout->addWidget(priceLabel);
-    priceLayout->addWidget(priceEdit);
-
-
-    // Location
-    QVBoxLayout *locationLayout =
-        new QVBoxLayout();
-
-    QLabel *locationLabel =
-        new QLabel("Location");
-
-    locationLabel->setStyleSheet(
-        "font-size: 13px; font-weight: 700; color: #374151;"
-        );
-
-    locationEdit =
-        new QLineEdit();
-
-    locationEdit->setPlaceholderText(
-        "e.g. Nainital"
-        );
-
-    locationLayout->addWidget(locationLabel);
-    locationLayout->addWidget(locationEdit);
-
-
-    row3->addLayout(priceLayout, 1);
-    row3->addLayout(locationLayout, 1);
-
-    detailsLayout->addLayout(row3);
-
-
-    // =====================================================
-    // DESCRIPTION
-    // =====================================================
-
-    QLabel *descriptionLabel =
-        new QLabel("Description");
-
-    descriptionLabel->setStyleSheet(
-        "font-size: 13px; font-weight: 700; color: #374151;"
-        );
-
-    descriptionEdit =
-        new QTextEdit();
-
-    descriptionEdit->setPlaceholderText(
-        "Describe the book's condition, edition, "
-        "highlights, included material, etc."
-        );
-
-    detailsLayout->addWidget(
-        descriptionLabel
-        );
-
-    detailsLayout->addWidget(
-        descriptionEdit
-        );
-
-
-    // =====================================================
-    // INFO BOX
-    // =====================================================
-
-    QFrame *infoBox =
-        new QFrame();
-
-    infoBox->setStyleSheet(R"(
-        QFrame {
-            background-color: #F8FAFC;
-            border: 1px solid #E2E8F0;
+    formLayout->addWidget(new QLabel("Author *", formCard));
+    authorEdit = new QLineEdit(formCard);
+    authorEdit->setPlaceholderText("e.g. Robert C. Martin");
+    authorEdit->setStyleSheet(AppStyle::inputStyle());
+    formLayout->addWidget(authorEdit);
+
+    // Row: Category & Condition
+    QHBoxLayout *rowCatCond = new QHBoxLayout();
+    rowCatCond->setSpacing(14);
+
+    QVBoxLayout *catBox = new QVBoxLayout();
+    catBox->setSpacing(6);
+    catBox->addWidget(new QLabel("Category *", formCard));
+    categoryCombo = new QComboBox(formCard);
+    categoryCombo->addItems({"Academic", "Engineering", "Fiction", "Non-Fiction", "Science", "Technology", "Business", "Self-Help", "Other"});
+    categoryCombo->setStyleSheet(AppStyle::comboBoxStyle());
+    catBox->addWidget(categoryCombo);
+    rowCatCond->addLayout(catBox);
+
+    QVBoxLayout *condBox = new QVBoxLayout();
+    condBox->setSpacing(6);
+    condBox->addWidget(new QLabel("Condition *", formCard));
+    conditionCombo = new QComboBox(formCard);
+    conditionCombo->addItems({"New", "Like New", "Very Good", "Good", "Acceptable"});
+    conditionCombo->setStyleSheet(AppStyle::comboBoxStyle());
+    condBox->addWidget(conditionCombo);
+    rowCatCond->addLayout(condBox);
+
+    formLayout->addLayout(rowCatCond);
+
+    // Row: Price & ISBN
+    QHBoxLayout *rowPriceIsbn = new QHBoxLayout();
+    rowPriceIsbn->setSpacing(14);
+
+    QVBoxLayout *priceBox = new QVBoxLayout();
+    priceBox->setSpacing(6);
+    priceBox->addWidget(new QLabel("Price (₹) *", formCard));
+    priceEdit = new QLineEdit(formCard);
+    priceEdit->setPlaceholderText("e.g. 450");
+    priceEdit->setStyleSheet(AppStyle::inputStyle());
+    priceBox->addWidget(priceEdit);
+    rowPriceIsbn->addLayout(priceBox);
+
+    QVBoxLayout *isbnBox = new QVBoxLayout();
+    isbnBox->setSpacing(6);
+    isbnBox->addWidget(new QLabel("ISBN (Optional)", formCard));
+    isbnEdit = new QLineEdit(formCard);
+    isbnEdit->setPlaceholderText("e.g. 9780132350884");
+    isbnEdit->setStyleSheet(AppStyle::inputStyle());
+    isbnBox->addWidget(isbnEdit);
+    rowPriceIsbn->addLayout(isbnBox);
+
+    formLayout->addLayout(rowPriceIsbn);
+
+    // Description
+    formLayout->addWidget(new QLabel("Description & Details", formCard));
+    descriptionEdit = new QTextEdit(formCard);
+    descriptionEdit->setPlaceholderText("Mention edition, markings, physical condition, highlighting, etc.");
+    descriptionEdit->setStyleSheet(QString(R"(
+        QTextEdit {
+            background-color: %1;
+            border: 1px solid %2;
             border-radius: 10px;
+            color: %3;
+            font-size: 13.5px;
+            padding: 10px 12px;
         }
-    )");
-
-
-    QHBoxLayout *infoLayout =
-        new QHBoxLayout(infoBox);
-
-    infoLayout->setContentsMargins(
-        14, 12, 14, 12
-        );
-
-
-    QLabel *infoIcon =
-        new QLabel("ⓘ");
-
-    infoIcon->setStyleSheet(R"(
-        QLabel {
-            color: #4F46E5;
-            font-size: 18px;
-            font-weight: bold;
-        }
-    )");
-
-
-    QLabel *infoText =
-        new QLabel(
-            "Tip: Clear descriptions and accurate book details "
-            "help buyers make confident decisions."
-            );
-
-    infoText->setWordWrap(true);
-
-    infoText->setStyleSheet(R"(
-        QLabel {
-            color: #64748B;
-            font-size: 12px;
-            border: none;
-        }
-    )");
-
-
-    infoLayout->addWidget(infoIcon);
-    infoLayout->addSpacing(8);
-    infoLayout->addWidget(infoText, 1);
-
-    detailsLayout->addWidget(infoBox);
-
-
-    contentLayout->addWidget(
-        detailsCard,
-        2
-        );
-
-
-    // =====================================================
-    // RIGHT IMAGE CARD
-    // =====================================================
-
-    QFrame *imageCard =
-        new QFrame();
-
-    imageCard->setFixedWidth(350);
-
-    imageCard->setStyleSheet(R"(
-        QFrame {
+        QTextEdit:focus {
+            border: 1px solid %4;
             background-color: #FFFFFF;
-            border: 1px solid #E3E7EF;
+        }
+    )").arg(AppStyle::SurfaceSubtle, AppStyle::BorderSubtle, AppStyle::TextPrimary, AppStyle::Primary));
+    descriptionEdit->setFixedHeight(120);
+    formLayout->addWidget(descriptionEdit);
+
+    formLayout->addStretch();
+    contentLayout->addWidget(formCard, 1);
+
+    // ==========================================
+    // Right Column: Media Upload Card
+    // ==========================================
+    QFrame *mediaCard = new QFrame(content);
+    mediaCard->setStyleSheet(QString(R"(
+        QFrame#mediaCard {
+            background-color: #FFFFFF;
+            border: 1px solid %1;
             border-radius: 16px;
         }
-    )");
+    )").arg(AppStyle::BorderSubtle));
+    mediaCard->setObjectName("mediaCard");
+    AppStyle::applyElevation(mediaCard, 16, 4, 15);
+
+    QVBoxLayout *mediaLayout = new QVBoxLayout(mediaCard);
+    mediaLayout->setContentsMargins(28, 28, 28, 28);
+    mediaLayout->setSpacing(18);
+
+    // Media Header
+    QHBoxLayout *mediaHeader = new QHBoxLayout();
+    QLabel *mediaTitle = new QLabel("Photos & Video", mediaCard);
+    mediaTitle->setStyleSheet(QString("color: %1; font-size: 18px; font-weight: 700;").arg(AppStyle::TextPrimary));
+
+    photoCountBadge = new QLabel("Photos: 0 / 6 (Min 4 Required)", mediaCard);
+    photoCountBadge->setStyleSheet(QString(R"(
+        background-color: %1;
+        color: %2;
+        border: 1px solid %3;
+        border-radius: 12px;
+        padding: 4px 12px;
+        font-size: 12px;
+        font-weight: 700;
+    )").arg(AppStyle::WarningLight, AppStyle::WarningText, AppStyle::WarningBorder));
+
+    mediaHeader->addWidget(mediaTitle);
+    mediaHeader->addStretch();
+    mediaHeader->addWidget(photoCountBadge);
+    mediaLayout->addLayout(mediaHeader);
+
+    QLabel *mediaSubtext = new QLabel("Upload 4 to 6 photos of your book. Buyers trust listings with clear cover, back, spine, and sample page photos.", mediaCard);
+    mediaSubtext->setStyleSheet(QString("color: %1; font-size: 12.5px;").arg(AppStyle::TextSecondary));
+    mediaSubtext->setWordWrap(true);
+    mediaLayout->addWidget(mediaSubtext);
+
+    // Select Multiple Button
+    chooseAllImagesBtn = new QPushButton("📁 Select Multiple Photos at Once...", mediaCard);
+    chooseAllImagesBtn->setCursor(Qt::PointingHandCursor);
+    chooseAllImagesBtn->setStyleSheet(AppStyle::secondaryButtonStyle());
+    chooseAllImagesBtn->setFixedHeight(38);
+    connect(chooseAllImagesBtn, &QPushButton::clicked, this, &SellWindow::chooseMultipleImages);
+    mediaLayout->addWidget(chooseAllImagesBtn);
+
+    // 6-Slot Grid (2 rows x 3 cols)
+    QGridLayout *grid = new QGridLayout();
+    grid->setSpacing(12);
+
+    imageSlots.clear();
+    for (int i = 0; i < 6; ++i) {
+        ImageSlotUI slot;
+
+        slot.frame = new QFrame(mediaCard);
+        slot.frame->setFixedSize(140, 185);
+        slot.frame->setObjectName(QString("slotFrame_%1").arg(i));
+        slot.frame->setStyleSheet(QString(R"(
+            QFrame#slotFrame_%1 {
+                background-color: %2;
+                border: 2px dashed %3;
+                border-radius: 12px;
+            }
+            QFrame#slotFrame_%1:hover {
+                border-color: %4;
+            }
+        )").arg(QString::number(i), AppStyle::SurfaceSubtle, AppStyle::BorderStrong, AppStyle::Primary));
+
+        QVBoxLayout *slotLayout = new QVBoxLayout(slot.frame);
+        slotLayout->setContentsMargins(6, 6, 6, 6);
+        slotLayout->setSpacing(4);
+
+        slot.previewLabel = new QLabel(slot.frame);
+        slot.previewLabel->setAlignment(Qt::AlignCenter);
+        slot.previewLabel->setFixedSize(128, 95);
+        slot.previewLabel->setStyleSheet("background: transparent; border: none;");
+
+        slot.titleLabel = new QLabel(SLOT_TITLES.value(i), slot.frame);
+        slot.titleLabel->setAlignment(Qt::AlignCenter);
+        slot.titleLabel->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 600; border: none;").arg(AppStyle::TextMuted));
+        slot.titleLabel->setWordWrap(true);
+
+        QHBoxLayout *btnRow = new QHBoxLayout();
+        btnRow->setSpacing(4);
+        btnRow->setContentsMargins(0, 0, 0, 0);
+
+        slot.thumbnailButton = new QPushButton("★ Cover", slot.frame);
+        slot.thumbnailButton->setCursor(Qt::PointingHandCursor);
+        slot.thumbnailButton->setFixedHeight(24);
+        slot.thumbnailButton->setVisible(false);
+
+        slot.actionButton = new QPushButton("+ Add", slot.frame);
+        slot.actionButton->setCursor(Qt::PointingHandCursor);
+        slot.actionButton->setFixedHeight(24);
+        slot.actionButton->setStyleSheet(AppStyle::secondaryButtonStyle());
+
+        connect(slot.thumbnailButton, &QPushButton::clicked, this, [this, i]() {
+            selectedThumbnailIndex = i;
+            updateImageSlotsUI();
+        });
+
+        connect(slot.actionButton, &QPushButton::clicked, this, [this, i]() {
+            if (i < selectedImagePaths.size()) {
+                removeImage(i);
+            } else {
+                chooseImageSlot(i);
+            }
+        });
+
+        btnRow->addWidget(slot.thumbnailButton, 1);
+        btnRow->addWidget(slot.actionButton, 1);
+
+        slotLayout->addWidget(slot.previewLabel);
+        slotLayout->addWidget(slot.titleLabel);
+        slotLayout->addLayout(btnRow);
+
+        grid->addWidget(slot.frame, i / 3, i % 3);
+        imageSlots.append(slot);
+    }
+    mediaLayout->addLayout(grid);
 
 
-    QVBoxLayout *imageLayout =
-        new QVBoxLayout(imageCard);
+    // ==========================================
+    // Optional Video Section
+    // ==========================================
+    QLabel *videoHeading = new QLabel("Optional Video Preview (≤ 15 sec, max 50MB)", mediaCard);
+    videoHeading->setStyleSheet(QString("color: %1; font-size: 14px; font-weight: 700; margin-top: 6px;").arg(AppStyle::TextPrimary));
+    mediaLayout->addWidget(videoHeading);
 
-    imageLayout->setContentsMargins(
-        25, 25, 25, 25
-        );
-
-    imageLayout->setSpacing(14);
-
-
-    // =====================================================
-    // IMAGE HEADER
-    // =====================================================
-
-    QLabel *imageTitle =
-        new QLabel("Book Cover");
-
-    imageTitle->setStyleSheet(R"(
-        QLabel {
-            font-size: 19px;
-            font-weight: 800;
-            color: #172033;
+    videoCard = new QFrame(mediaCard);
+    videoCard->setStyleSheet(QString(R"(
+        QFrame {
+            background-color: %1;
+            border: 1px solid %2;
+            border-radius: 12px;
         }
-    )");
+    )").arg(AppStyle::SurfaceSubtle, AppStyle::BorderSubtle));
 
-    imageLayout->addWidget(imageTitle);
+    QHBoxLayout *videoLayout = new QHBoxLayout(videoCard);
+    videoLayout->setContentsMargins(14, 12, 14, 12);
+    videoLayout->setSpacing(12);
 
+    videoStatusLabel = new QLabel("No video selected (Optional clip showing book pages)", videoCard);
+    videoStatusLabel->setStyleSheet(QString("color: %1; font-size: 12.5px;").arg(AppStyle::TextSecondary));
 
-    QLabel *imageSubtitle =
-        new QLabel(
-            "Upload a clear front-cover image."
-            );
+    chooseVideoBtn = new QPushButton("🎥 Select Video...", videoCard);
+    chooseVideoBtn->setCursor(Qt::PointingHandCursor);
+    chooseVideoBtn->setStyleSheet(AppStyle::secondaryButtonStyle());
+    chooseVideoBtn->setFixedHeight(34);
+    connect(chooseVideoBtn, &QPushButton::clicked, this, &SellWindow::chooseVideo);
 
-    imageSubtitle->setStyleSheet(R"(
-        QLabel {
-            color: #64748B;
+    removeVideoBtn = new QPushButton("✕ Remove", videoCard);
+    removeVideoBtn->setCursor(Qt::PointingHandCursor);
+    removeVideoBtn->setStyleSheet(AppStyle::dangerButtonStyle());
+    removeVideoBtn->setFixedHeight(34);
+    removeVideoBtn->setVisible(false);
+    connect(removeVideoBtn, &QPushButton::clicked, this, &SellWindow::removeVideo);
+
+    videoLayout->addWidget(videoStatusLabel, 1);
+    videoLayout->addWidget(chooseVideoBtn);
+    videoLayout->addWidget(removeVideoBtn);
+    mediaLayout->addWidget(videoCard);
+
+    // Publish Button
+    sellButton = new QPushButton("Publish Book Listing", mediaCard);
+    sellButton->setCursor(Qt::PointingHandCursor);
+    sellButton->setStyleSheet(AppStyle::primaryButtonStyle());
+    sellButton->setFixedHeight(48);
+    connect(sellButton, &QPushButton::clicked, this, &SellWindow::sellBook);
+    mediaLayout->addWidget(sellButton);
+
+    contentLayout->addWidget(mediaCard, 1);
+
+    scrollArea->setWidget(content);
+    rootLayout->addWidget(scrollArea);
+
+    updateImageSlotsUI();
+    updateVideoUI();
+}
+
+void SellWindow::updateImageSlotsUI()
+{
+    const int count = selectedImagePaths.size();
+
+    // Update count badge
+    if (count >= 4) {
+        photoCountBadge->setText(QString("Photos: %1 / 6 (Requirement Met)").arg(count));
+        photoCountBadge->setStyleSheet(QString(R"(
+            background-color: %1;
+            color: %2;
+            border: 1px solid %3;
+            border-radius: 12px;
+            padding: 4px 12px;
             font-size: 12px;
-            border: none;
+            font-weight: 700;
+        )").arg(AppStyle::SuccessLight, AppStyle::SuccessText, AppStyle::SuccessBorder));
+    } else {
+        photoCountBadge->setText(QString("Photos: %1 / 6 (%2 more required)").arg(count).arg(4 - count));
+        photoCountBadge->setStyleSheet(QString(R"(
+            background-color: %1;
+            color: %2;
+            border: 1px solid %3;
+            border-radius: 12px;
+            padding: 4px 12px;
+            font-size: 12px;
+            font-weight: 700;
+        )").arg(AppStyle::WarningLight, AppStyle::WarningText, AppStyle::WarningBorder));
+    }
+
+    if (selectedThumbnailIndex >= selectedImagePaths.size()) {
+        selectedThumbnailIndex = 0;
+    }
+
+    for (int i = 0; i < 6; ++i) {
+        if (i >= imageSlots.size()) break;
+        auto &slot = imageSlots[i];
+
+        if (i < selectedImagePaths.size()) {
+            const QString path = selectedImagePaths[i];
+            QPixmap pix(path);
+            if (!pix.isNull()) {
+                slot.previewLabel->setPixmap(pix.scaled(128, 95, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            } else {
+                slot.previewLabel->setText("Image loaded");
+            }
+            slot.actionButton->setText("✕ Remove");
+            slot.actionButton->setStyleSheet(AppStyle::dangerButtonStyle());
+            slot.actionButton->setFixedHeight(24);
+
+            slot.thumbnailButton->setVisible(true);
+            if (i == selectedThumbnailIndex) {
+                slot.thumbnailButton->setText("★ Cover");
+                slot.thumbnailButton->setStyleSheet(QString(R"(
+                    QPushButton {
+                        background-color: %1;
+                        color: #FFFFFF;
+                        font-size: 10px;
+                        font-weight: 700;
+                        border: none;
+                        border-radius: 6px;
+                    }
+                )").arg(AppStyle::Primary));
+                slot.titleLabel->setText("★ PRIMARY COVER");
+                slot.titleLabel->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 800;").arg(AppStyle::Primary));
+                slot.frame->setStyleSheet(QString(R"(
+                    QFrame#slotFrame_%1 {
+                        background-color: %2;
+                        border: 2px solid %3;
+                        border-radius: 12px;
+                    }
+                )").arg(QString::number(i), AppStyle::PrimaryLight, AppStyle::Primary));
+            } else {
+                slot.thumbnailButton->setText("Set Cover");
+                slot.thumbnailButton->setStyleSheet(AppStyle::secondaryButtonStyle());
+                slot.titleLabel->setText(SLOT_TITLES.value(i));
+                slot.titleLabel->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 600;").arg(AppStyle::TextPrimary));
+                slot.frame->setStyleSheet(QString(R"(
+                    QFrame#slotFrame_%1 {
+                        background-color: #FFFFFF;
+                        border: 1.5px solid %2;
+                        border-radius: 12px;
+                    }
+                )").arg(QString::number(i), AppStyle::BorderSubtle));
+            }
+        } else {
+            slot.thumbnailButton->setVisible(false);
+            slot.previewLabel->clear();
+            slot.previewLabel->setText(i < 4 ? "📷 Required" : "📷 Optional");
+            slot.previewLabel->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: 600;").arg(i < 4 ? AppStyle::Primary : AppStyle::TextMuted));
+            slot.titleLabel->setText(SLOT_TITLES.value(i));
+            slot.titleLabel->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 600;").arg(AppStyle::TextMuted));
+            slot.actionButton->setText("+ Add");
+            slot.actionButton->setStyleSheet(AppStyle::secondaryButtonStyle());
+            slot.actionButton->setFixedHeight(24);
+            slot.frame->setStyleSheet(QString(R"(
+                QFrame#slotFrame_%1 {
+                    background-color: %2;
+                    border: 2px dashed %3;
+                    border-radius: 12px;
+                }
+                QFrame#slotFrame_%1:hover {
+                    border-color: %4;
+                }
+            )").arg(QString::number(i), AppStyle::SurfaceSubtle, AppStyle::BorderStrong, AppStyle::Primary));
         }
-    )");
-
-    imageLayout->addWidget(
-        imageSubtitle
-        );
-
-
-    // =====================================================
-    // IMAGE PREVIEW
-    // =====================================================
-
-    imagePreview =
-        new QLabel();
-
-    imagePreview->setFixedSize(
-        290,
-        350
-        );
-
-    imagePreview->setAlignment(
-        Qt::AlignCenter
-        );
-
-    imagePreview->setText(
-        "📚\n\nNo image selected\n\n"
-        "Your book cover will appear here"
-        );
-
-    imagePreview->setWordWrap(true);
-
-    imagePreview->setStyleSheet(R"(
-        QLabel {
-            background-color: #F8FAFC;
-            color: #94A3B8;
-            border: 2px dashed #CBD5E1;
-            border-radius: 14px;
-            font-size: 13px;
-            font-weight: 600;
-        }
-    )");
-
-
-    imageLayout->addWidget(
-        imagePreview,
-        0,
-        Qt::AlignCenter
-        );
-
-
-    // =====================================================
-    // CHOOSE IMAGE BUTTON
-    // =====================================================
-
-    chooseImageButton =
-        new QPushButton(
-            "＋  Choose Book Image"
-            );
-
-    chooseImageButton->setMinimumHeight(
-        46
-        );
-
-    chooseImageButton->setStyleSheet(R"(
-        QPushButton {
-            background-color: #EEF2FF;
-            color: #4F46E5;
-            border: 1px solid #C7D2FE;
-        }
-
-        QPushButton:hover {
-            background-color: #E0E7FF;
-            border-color: #A5B4FC;
-        }
-
-        QPushButton:pressed {
-            background-color: #C7D2FE;
-        }
-    )");
-
-
-    imageLayout->addWidget(
-        chooseImageButton
-        );
-
-
-    // =====================================================
-    // IMAGE PATH
-    // =====================================================
-
-    imagePathLabel =
-        new QLabel(
-            "No image selected"
-            );
-
-    imagePathLabel->setAlignment(
-        Qt::AlignCenter
-        );
-
-    imagePathLabel->setWordWrap(
-        true
-        );
-
-    imagePathLabel->setStyleSheet(R"(
-        QLabel {
-            color: #94A3B8;
-            font-size: 11px;
-            border: none;
-        }
-    )");
-
-
-    imageLayout->addWidget(
-        imagePathLabel
-        );
-
-
-    imageLayout->addStretch();
-
-
-    // =====================================================
-    // PUBLISH BUTTON
-    // =====================================================
-
-    sellButton =
-        new QPushButton(
-            "Publish Book"
-            );
-
-    sellButton->setMinimumHeight(
-        52
-        );
-
-    sellButton->setStyleSheet(R"(
-        QPushButton {
-            background-color: #4F46E5;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 15px;
-            font-weight: 800;
-        }
-
-        QPushButton:hover {
-            background-color: #4338CA;
-        }
-
-        QPushButton:pressed {
-            background-color: #3730A3;
-        }
-
-        QPushButton:disabled {
-            background-color: #A5B4FC;
-        }
-    )");
-
-
-    imageLayout->addWidget(
-        sellButton
-        );
-
-
-    contentLayout->addWidget(
-        imageCard,
-        0
-        );
-
-
-    mainLayout->addLayout(
-        contentLayout
-        );
-
-
-    // =====================================================
-    // FOOTER
-    // =====================================================
-
-    QLabel *footer =
-        new QLabel(
-            "By publishing this listing, you confirm that "
-            "the information provided is accurate."
-            );
-
-    footer->setAlignment(
-        Qt::AlignCenter
-        );
-
-    footer->setStyleSheet(R"(
-        QLabel {
-            color: #94A3B8;
-            font-size: 11px;
-        }
-    )");
-
-
-    mainLayout->addWidget(
-        footer
-        );
-
-
-    // =====================================================
-    // SET SCROLL WIDGET
-    // =====================================================
-
-    scrollArea->setWidget(
-        scrollContent
-        );
-
-    outerLayout->addWidget(
-        scrollArea,
-        1
-        );
-
-
-    // =====================================================
-    // CONNECTIONS
-    // =====================================================
-
-    connect(
-        chooseImageButton,
-        &QPushButton::clicked,
-        this,
-        &SellWindow::chooseImage
-        );
-
-
-    connect(
-        sellButton,
-        &QPushButton::clicked,
-        this,
-        &SellWindow::sellBook
-        );
-
-
-    connect(
-        backButton,
-        &QPushButton::clicked,
-        this,
-        &SellWindow::handleBack
-        );
+    }
 }
 
 
-// =========================================================
-// CHOOSE IMAGE
-// =========================================================
-
-void SellWindow::chooseImage()
+void SellWindow::chooseImageSlot(int index)
 {
-    QString filePath =
-        QFileDialog::getOpenFileName(
-            this,
-            "Select Book Cover",
-            QString(),
-            "Images (*.png *.jpg *.jpeg *.bmp *.webp)"
-            );
+    const QString filePath = QFileDialog::getOpenFileName(
+        this,
+        "Select Book Image",
+        QString(),
+        "Images (*.png *.jpg *.jpeg *.webp *.bmp)"
+    );
 
+    if (filePath.isEmpty()) return;
 
-    if (filePath.isEmpty())
-    {
-        return;
+    if (index < selectedImagePaths.size()) {
+        selectedImagePaths[index] = filePath;
+    } else if (selectedImagePaths.size() < 6) {
+        selectedImagePaths.append(filePath);
     }
-
-
-    QPixmap pixmap(filePath);
-
-
-    if (pixmap.isNull())
-    {
-        QMessageBox::warning(
-            this,
-            "Invalid Image",
-            "The selected file could not be loaded."
-            );
-
-        return;
-    }
-
-
-    selectedImagePath =
-        filePath;
-
-
-    QPixmap scaled =
-        pixmap.scaled(
-            imagePreview->size(),
-            Qt::KeepAspectRatio,
-            Qt::SmoothTransformation
-            );
-
-
-    imagePreview->setPixmap(
-        scaled
-        );
-
-
-    imagePreview->setText(
-        QString()
-        );
-
-
-    imagePathLabel->setText(
-        QFileInfo(filePath).fileName()
-        );
-
-
-    imagePathLabel->setStyleSheet(R"(
-        QLabel {
-            color: #475569;
-            font-size: 11px;
-            font-weight: 600;
-            border: none;
-        }
-    )");
+    updateImageSlotsUI();
 }
 
-
-// =========================================================
-// COPY IMAGE TO APPLICATION FOLDER
-// =========================================================
-
-QString SellWindow::copyImageToAppFolder(
-    const QString &sourcePath
-    )
+void SellWindow::chooseMultipleImages()
 {
-    if (sourcePath.isEmpty())
-    {
-        return QString();
-    }
+    const QStringList files = QFileDialog::getOpenFileNames(
+        this,
+        "Select Book Images (Min 4, Max 6)",
+        QString(),
+        "Images (*.png *.jpg *.jpeg *.webp *.bmp)"
+    );
 
+    if (files.isEmpty()) return;
 
-    QFileInfo sourceInfo(
-        sourcePath
-        );
-
-
-    if (!sourceInfo.exists())
-    {
-        return QString();
-    }
-
-
-    QString appDataPath =
-        QStandardPaths::writableLocation(
-            QStandardPaths::AppDataLocation
-            );
-
-
-    if (appDataPath.isEmpty())
-    {
-        return QString();
-    }
-
-
-    QDir appDirectory(
-        appDataPath
-        );
-
-
-    if (!appDirectory.exists())
-    {
-        if (!appDirectory.mkpath("."))
-        {
-            return QString();
+    for (const auto &file : files) {
+        if (selectedImagePaths.size() >= 6) break;
+        if (!selectedImagePaths.contains(file)) {
+            selectedImagePaths.append(file);
         }
     }
 
+    updateImageSlotsUI();
+}
 
-    QString imagesPath =
-        appDataPath + "/images";
+void SellWindow::removeImage(int index)
+{
+    if (index >= 0 && index < selectedImagePaths.size()) {
+        selectedImagePaths.removeAt(index);
+        updateImageSlotsUI();
+    }
+}
 
+void SellWindow::updateVideoUI()
+{
+    if (!selectedVideoPath.isEmpty()) {
+        QFileInfo fi(selectedVideoPath);
+        const double mb = static_cast<double>(fi.size()) / (1024.0 * 1024.0);
+        videoStatusLabel->setText(QString("✓ %1 (%2 MB)").arg(fi.fileName()).arg(QString::number(mb, 'f', 1)));
+        videoStatusLabel->setStyleSheet(QString("color: %1; font-weight: 700; font-size: 13px;").arg(AppStyle::Success));
+        chooseVideoBtn->setText("Change Video...");
+        removeVideoBtn->setVisible(true);
+    } else {
+        videoStatusLabel->setText("No video selected (Optional clip showing book pages)");
+        videoStatusLabel->setStyleSheet(QString("color: %1; font-size: 12.5px;").arg(AppStyle::TextSecondary));
+        chooseVideoBtn->setText("🎥 Select Video...");
+        removeVideoBtn->setVisible(false);
+    }
+}
 
-    QDir imagesDirectory(
-        imagesPath
+void SellWindow::chooseVideo()
+{
+    const QString filePath = QFileDialog::getOpenFileName(
+        this,
+        "Select Short Book Video (≤ 15 seconds, max 50MB)",
+        QString(),
+        "Video Files (*.mp4 *.webm *.mov *.avi *.mkv)"
+    );
+
+    if (filePath.isEmpty()) return;
+
+    QFileInfo fi(filePath);
+    constexpr qint64 maxBytes = 50 * 1024 * 1024; // 50MB
+    if (fi.size() > maxBytes) {
+        StyledMessageBox::warning(
+            this,
+            "Video Too Large",
+            QString("The selected video is %1 MB. Video size must be less than 50MB and 15 seconds or less.")
+                .arg(QString::number(static_cast<double>(fi.size()) / (1024.0 * 1024.0), 'f', 1))
         );
-
-
-    if (!imagesDirectory.exists())
-    {
-        if (!imagesDirectory.mkpath("."))
-        {
-            return QString();
-        }
+        return;
     }
 
+    selectedVideoPath = filePath;
+    updateVideoUI();
+}
 
-    // =====================================================
-    // UNIQUE FILE NAME
-    // =====================================================
+void SellWindow::removeVideo()
+{
+    selectedVideoPath.clear();
+    updateVideoUI();
+}
 
-    QString extension =
-        sourceInfo.suffix().toLower();
+QString SellWindow::copyMediaToUploads(const QString &sourcePath)
+{
+    QFileInfo sourceInfo(sourcePath);
+    if (!sourceInfo.exists()) {
+        return QString();
+    }
 
+    const QString extension = sourceInfo.suffix().toLower();
+    const QString fileName = sourceInfo.completeBaseName() + "_" +
+                             QString::number(QDateTime::currentMSecsSinceEpoch()) +
+                             "." + extension;
 
-    QString baseName =
-        sourceInfo.completeBaseName();
-
-
-    QString fileName =
-        baseName +
-        "_" +
-        QString::number(
-            QDateTime::currentMSecsSinceEpoch()
-            ) +
-        "." +
-        extension;
-
-
-    QString destinationPath = imagesPath + "/" + fileName;
-
-    QString destinationDir;
-    QStringList candidates = {
-        "d:/1Hello-World/1pbl-oops/backend/public/uploads",
-        QDir::currentPath() + "/../backend/public/uploads",
-        QDir::currentPath() + "/../../backend/public/uploads"
+    // Target upload locations
+    const QStringList candidates = {
+        QStringLiteral("d:/1Hello-World/1pbl-oops/backend/public/uploads"),
+        QDir::currentPath() + QStringLiteral("/../backend/public/uploads"),
+        QDir::currentPath() + QStringLiteral("/../../backend/public/uploads"),
+        QDir::currentPath() + QStringLiteral("/backend/public/uploads")
     };
+
+    QString targetDir;
     for (const auto &c : candidates) {
-        if (QDir(c).exists()) {
-            destinationDir = QDir(c).canonicalPath();
+        QDir d(c);
+        if (d.exists()) {
+            targetDir = d.canonicalPath();
             break;
         }
     }
 
-    if (!destinationDir.isEmpty()) {
-        QString destFile = destinationDir + "/" + fileName;
+    if (!targetDir.isEmpty()) {
+        const QString destFile = targetDir + "/" + fileName;
         if (QFile::copy(sourcePath, destFile)) {
             return QStringLiteral("http://localhost:8080/uploads/") + fileName;
         }
     }
 
-    if (!QFile::copy(sourcePath, destinationPath))
-    {
-        return QString();
+    // Fallback to app data
+    const QString appDataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/uploads";
+    QDir(appDataPath).mkpath(".");
+    const QString fallbackFile = appDataPath + "/" + fileName;
+    if (QFile::copy(sourcePath, fallbackFile)) {
+        return fallbackFile;
     }
 
-    return destinationPath;
+    return QString();
 }
-
-
-// =========================================================
-// SELL BOOK
-// =========================================================
 
 void SellWindow::sellBook()
 {
-    QString title =
-        titleEdit->text().trimmed();
+    const QString title = titleEdit ? titleEdit->text().trimmed() : QString();
+    const QString author = authorEdit ? authorEdit->text().trimmed() : QString();
+    const QString priceText = priceEdit ? priceEdit->text().trimmed() : QString();
+    const QString category = categoryCombo ? categoryCombo->currentText() : QString();
+    const QString condition = conditionCombo ? conditionCombo->currentText() : QString();
+    const QString isbn = isbnEdit ? isbnEdit->text().trimmed() : QString();
+    const QString description = descriptionEdit ? descriptionEdit->toPlainText().trimmed() : QString();
 
-
-    QString author =
-        authorEdit->text().trimmed();
-
-
-    QString isbn =
-        isbnEdit->text().trimmed();
-
-
-    QString category =
-        categoryCombo->currentText();
-
-
-    QString condition =
-        conditionCombo->currentText();
-
-
-    QString priceText =
-        priceEdit->text().trimmed();
-
-
-    QString description =
-        descriptionEdit->toPlainText().trimmed();
-
-
-    QString location =
-        locationEdit->text().trimmed();
-
-
-    // =====================================================
-    // VALIDATION
-    // =====================================================
-
-    if (title.isEmpty())
-    {
-        QMessageBox::warning(
-            this,
-            "Missing Information",
-            "Please enter the book title."
-            );
-
-        titleEdit->setFocus();
-
+    if (title.isEmpty()) {
+        StyledMessageBox::warning(this, "Missing Title", "Please enter the book title.");
+        if (titleEdit) titleEdit->setFocus();
         return;
     }
 
-
-    if (author.isEmpty())
-    {
-        QMessageBox::warning(
-            this,
-            "Missing Information",
-            "Please enter the author name."
-            );
-
-        authorEdit->setFocus();
-
+    if (author.isEmpty()) {
+        StyledMessageBox::warning(this, "Missing Author", "Please enter the author name.");
+        if (authorEdit) authorEdit->setFocus();
         return;
     }
 
-
-    if (priceText.isEmpty())
-    {
-        QMessageBox::warning(
-            this,
-            "Missing Information",
-            "Please enter the selling price."
-            );
-
-        priceEdit->setFocus();
-
+    bool priceOk = false;
+    const double price = priceText.toDouble(&priceOk);
+    if (!priceOk || price <= 0) {
+        StyledMessageBox::warning(this, "Invalid Price", "Please enter a valid price greater than ₹0.");
+        if (priceEdit) priceEdit->setFocus();
         return;
     }
 
-
-    bool ok = false;
-
-
-    double price =
-        priceText.toDouble(
-            &ok
-            );
-
-
-    if (!ok || price <= 0)
-    {
-        QMessageBox::warning(
+    // Validate images: minimum 4, maximum 6 required
+    if (selectedImagePaths.size() < 4) {
+        StyledMessageBox::warning(
             this,
-            "Invalid Price",
-            "Please enter a valid price greater than ₹0."
-            );
-
-        priceEdit->setFocus();
-
+            "Photos Required",
+            QString("You must upload at least 4 photos (Cover, Back, Spine, Sample Page). You currently have %1 of 4 required.")
+                .arg(selectedImagePaths.size())
+        );
         return;
     }
 
+    if (selectedImagePaths.size() > 6) {
+        StyledMessageBox::warning(this, "Too Many Photos", "Maximum 6 photos are allowed per listing.");
+        return;
+    }
 
-    // =====================================================
-    // COPY IMAGE
-    // =====================================================
+    sellButton->setEnabled(false);
+    sellButton->setText("Uploading & Publishing...");
 
-    QString storedImagePath;
-
-
-    if (!selectedImagePath.isEmpty())
-    {
-        storedImagePath =
-            copyImageToAppFolder(
-                selectedImagePath
-                );
-
-
-        if (storedImagePath.isEmpty())
-        {
-            QMessageBox::warning(
-                this,
-                "Image Error",
-                "The selected image could not be saved.\n\n"
-                "Please choose the image again."
-                );
-
-            return;
+    // Copy photos
+    QStringList uploadedImageUrls;
+    for (const auto &imgPath : selectedImagePaths) {
+        QString uploaded = copyMediaToUploads(imgPath);
+        if (!uploaded.isEmpty()) {
+            uploadedImageUrls.append(uploaded);
         }
     }
 
+    if (uploadedImageUrls.size() < 4) {
+        sellButton->setEnabled(true);
+        sellButton->setText("Publish Book Listing");
+        StyledMessageBox::critical(this, "Upload Failed", "Could not process all book photos. Please try selecting the files again.");
+        return;
+    }
 
-    // =====================================================
-    // POST TO BACKEND API
-    // =====================================================
+    // Copy video if provided
+    QString uploadedVideoUrl;
+    if (!selectedVideoPath.isEmpty()) {
+        uploadedVideoUrl = copyMediaToUploads(selectedVideoPath);
+    }
 
-    sellButton->setEnabled(false);
-    sellButton->setText("Publishing...");
-
+    // Build JSON request
     QJsonObject body;
     body[QStringLiteral("title")] = title;
     body[QStringLiteral("author")] = author;
@@ -1451,32 +757,45 @@ void SellWindow::sellBook()
     body[QStringLiteral("condition")] = condition;
     body[QStringLiteral("category")] = category;
     body[QStringLiteral("isbn")] = isbn;
-    body[QStringLiteral("description")] = description;
-    body[QStringLiteral("coverImage")] = storedImagePath;
+    if (selectedThumbnailIndex >= uploadedImageUrls.size()) {
+        selectedThumbnailIndex = 0;
+    }
+    const QString primaryCover = uploadedImageUrls.value(selectedThumbnailIndex);
+    body[QStringLiteral("coverImage")] = primaryCover;
+
+    QJsonArray imgArray;
+    imgArray.append(primaryCover);
+    for (int i = 0; i < uploadedImageUrls.size(); ++i) {
+        if (i != selectedThumbnailIndex) {
+            imgArray.append(uploadedImageUrls[i]);
+        }
+    }
+    body[QStringLiteral("images")] = imgArray;
+
+    if (!uploadedVideoUrl.isEmpty()) {
+        body[QStringLiteral("videoUrl")] = uploadedVideoUrl;
+    }
+
 
     auto *reply = ApiClient::instance().post(QStringLiteral("/api/books"), body, true);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, storedImagePath]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
         reply->deleteLater();
 
         sellButton->setEnabled(true);
-        sellButton->setText("Publish Book");
+        sellButton->setText("Publish Book Listing");
 
         if (ok) {
-            QMessageBox::information(
+            StyledMessageBox::success(
                 this,
                 "Book Published",
                 "Your book has been successfully listed on BookBazzar!"
             );
-
             emit bookAdded();
+            emit bookPublished();
             emit backRequested();
         } else {
-            if (!storedImagePath.isEmpty() && !storedImagePath.startsWith("http")) {
-                QFile::remove(storedImagePath);
-            }
-
-            QMessageBox::critical(
+            StyledMessageBox::critical(
                 this,
                 "Unable to Publish",
                 errorMsg.isEmpty() ? "The book could not be added to the marketplace." : errorMsg
@@ -1484,11 +803,6 @@ void SellWindow::sellBook()
         }
     });
 }
-
-
-// =========================================================
-// BACK
-// =========================================================
 
 void SellWindow::handleBack()
 {

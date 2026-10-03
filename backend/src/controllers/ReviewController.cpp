@@ -65,10 +65,20 @@ Json::Value reviewJson(const Review &rev) {
   Json::Value json;
   json["id"] = rev.id;
   json["bookId"] = rev.bookId;
+  json["orderId"] = rev.orderId;
+  json["sellerId"] = rev.sellerId;
+  json["sellerUsername"] = rev.sellerUsername;
   json["reviewerId"] = rev.reviewerId;
   json["reviewerUsername"] = rev.reviewerUsername;
   json["rating"] = rev.rating;
   json["comment"] = rev.comment;
+
+  Json::Value images(Json::arrayValue);
+  for (const auto &img : rev.images) {
+    images.append(img);
+  }
+  json["images"] = images;
+
   json["createdAt"] = toIsoString(rev.createdAt);
   json["updatedAt"] = toIsoString(rev.updatedAt);
   return json;
@@ -101,6 +111,15 @@ void ReviewController::createReview(
   const int rating = (*json)["rating"].asInt();
   const auto comment = (*json)["comment"].asString();
 
+  std::vector<std::string> images;
+  if (json->isMember("images") && (*json)["images"].isArray()) {
+    for (const auto &val : (*json)["images"]) {
+      if (val.isString()) {
+        images.push_back(val.asString());
+      }
+    }
+  }
+
   if (!isValidObjectId(orderId) || !isValidObjectId(bookId)) {
     callback(jsonError(k400BadRequest, "Invalid orderId or bookId format"));
     return;
@@ -114,12 +133,13 @@ void ReviewController::createReview(
     ReviewService service(reviews, orders, books, users);
 
     const auto review =
-        service.createReview(userId, orderId, bookId, rating, comment);
+        service.createReview(userId, orderId, bookId, rating, comment, images);
 
     Json::Value body;
     body["success"] = true;
     body["message"] = "Review submitted successfully";
     body["review"] = reviewJson(review);
+
 
     auto response = HttpResponse::newHttpJsonResponse(body);
     response->setStatusCode(k201Created);
@@ -196,7 +216,60 @@ void ReviewController::getBookReviews(
   }
 }
 
+void ReviewController::getSellerReviews(
+    const HttpRequestPtr &req,
+    std::function<void(const HttpResponsePtr &)> &&callback,
+    std::string sellerId) {
+  if (!isValidObjectId(sellerId)) {
+    callback(jsonError(k400BadRequest, "Invalid sellerId format"));
+    return;
+  }
+
+  int page = parseIntParam(req->getParameter("page"), 1);
+  int limit = parseIntParam(req->getParameter("limit"), 10);
+
+  try {
+    ReviewRepository reviews;
+    OrderRepository orders;
+    BookRepository books;
+    UserRepository users;
+    ReviewService service(reviews, orders, books, users);
+
+    const auto pageResult = service.getSellerReviews(sellerId, page, limit);
+    const auto stats = service.getSellerRating(sellerId);
+
+    Json::Value body;
+    body["success"] = true;
+    body["sellerId"] = sellerId;
+    body["averageRating"] = stats.first;
+    body["reviewCount"] = stats.second;
+
+    Json::Value items(Json::arrayValue);
+    for (const auto &r : pageResult.items) {
+      items.append(reviewJson(r));
+    }
+    body["reviews"] = items;
+
+    Json::Value meta;
+    meta["total"] = static_cast<Json::Int64>(pageResult.total);
+    meta["page"] = pageResult.page;
+    meta["limit"] = pageResult.limit;
+    meta["totalPages"] = pageResult.totalPages;
+    meta["hasNextPage"] = pageResult.hasNextPage;
+    meta["hasPrevPage"] = pageResult.hasPrevPage;
+    body["pagination"] = meta;
+
+    auto response = HttpResponse::newHttpJsonResponse(body);
+    response->setStatusCode(k200OK);
+    callback(response);
+  } catch (const std::exception &e) {
+    LOG_ERROR << "Get seller reviews failed: " << e.what();
+    callback(jsonError(k500InternalServerError, "Internal server error"));
+  }
+}
+
 void ReviewController::getMyReviews(
+
     const HttpRequestPtr &req,
     std::function<void(const HttpResponsePtr &)> &&callback) {
   const auto userId = req->attributes()->get<std::string>("userId");

@@ -1,11 +1,21 @@
 #include "homewindow.h"
 #include "bookdetailswindow.h"
+#include "browsewindow.h"
+#include "sellwindow.h"
+#include "listingswindow.h"
+#include "orderswindow.h"
+#include "windows/CartWindow.h"
+#include "windows/CheckoutWindow.h"
+#include "windows/OrderDetailWindow.h"
+#include "windows/ExchangeWindow.h"
+#include "ImageLoader.h"
 #include "network/ApiClient.h"
 #include "auth/SessionManager.h"
 #include "models/DataModels.h"
+#include "AppStyle.h"
+
 #include <QUrlQuery>
 #include <QNetworkReply>
-
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLineEdit>
@@ -13,26 +23,23 @@
 #include <QLabel>
 #include <QFrame>
 #include <QScrollArea>
-#include <QMessageBox>
+#include <QStackedWidget>
+#include "StyledMessageBox.h"
 #include <QSizePolicy>
 #include <QPixmap>
 #include <QFileInfo>
 #include <QFont>
 #include <QStringList>
 #include <QDialog>
-#include <QDialogButtonBox>
-#include <QGraphicsDropShadowEffect>
 #include <QPainter>
 #include <QLinearGradient>
 #include <QVector>
 #include <QPair>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QDateTime>
 
-// =========================================================
-// CONSTRUCTOR
-// =========================================================
-
-HomeWindow::HomeWindow(const QString &userName,
-                       QWidget *parent)
+HomeWindow::HomeWindow(const QString &userName, QWidget *parent)
     : QWidget(parent),
     userName(userName),
     searchEdit(nullptr),
@@ -40,108 +47,41 @@ HomeWindow::HomeWindow(const QString &userName,
     cartButton(nullptr),
     exchangesButton(nullptr),
     logoutButton(nullptr),
-    recentBooksLayout(nullptr)
+    profileButton(nullptr),
+    recentBooksLayout(nullptr),
+    mainStackedWidget(nullptr),
+    homeScrollArea(nullptr)
 {
     setWindowTitle("BookBazzar - Home");
-
-    resize(1400, 850);
-    setMinimumSize(1000, 650);
+    resize(1360, 850);
+    setMinimumSize(1020, 680);
+    setStyleSheet(QString("background-color: %1;").arg(AppStyle::Background));
 
     setupUI();
     refreshCartCount();
 }
 
-
-// =========================================================
-// DESTRUCTOR
-// =========================================================
-
 HomeWindow::~HomeWindow()
 {
 }
 
-
-// =========================================================
-// ELEVATION HELPER
-// =========================================================
-// A soft drop shadow is what makes cards/panels read as "raised"
-// surfaces instead of flat rectangles - this is one of the biggest
-// single changes that makes a UI look like a real product rather
-// than a placeholder mockup.
-
-void HomeWindow::applyElevation(QWidget *widget, int blurRadius,
-                                int yOffset, int alpha)
-{
-    QGraphicsDropShadowEffect *shadow =
-        new QGraphicsDropShadowEffect(widget);
-
-    shadow->setBlurRadius(blurRadius);
-    shadow->setOffset(0, yOffset);
-    shadow->setColor(QColor(23, 32, 51, alpha));
-
-    widget->setGraphicsEffect(shadow);
-}
-
-
-// =========================================================
-// MAIN UI
-// =========================================================
-
 void HomeWindow::setupUI()
 {
-    setStyleSheet(R"(
+    mainStackedWidget = new QStackedWidget(this);
 
-        QWidget {
-            font-family: "Segoe UI";
-        }
-
+    homeScrollArea = new QScrollArea(mainStackedWidget);
+    homeScrollArea->setWidgetResizable(true);
+    homeScrollArea->setFrameShape(QFrame::NoFrame);
+    homeScrollArea->setStyleSheet(QString(R"(
         QScrollArea {
+            background-color: %1;
             border: none;
-            background-color: #F7F8FC;
         }
-
-        QScrollBar:vertical {
-            width: 10px;
-            background: transparent;
-            margin: 4px;
-        }
-
-        QScrollBar::handle:vertical {
-            background: #C7CBD6;
-            border-radius: 5px;
-            min-height: 45px;
-        }
-
-        QScrollBar::handle:vertical:hover {
-            background: #A5A9B4;
-        }
-
-        QScrollBar::add-line:vertical,
-        QScrollBar::sub-line:vertical {
-            height: 0px;
-        }
-
-        QScrollBar:horizontal {
-            height: 0px;
-        }
-
-    )");
-
-    QScrollArea *scrollArea = new QScrollArea(this);
-
-    scrollArea->setWidgetResizable(true);
-    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    scrollArea->setFrameShape(QFrame::NoFrame);
+        %2
+    )").arg(AppStyle::Background, AppStyle::scrollBarStyle()));
 
     QWidget *page = new QWidget();
-    page->setObjectName("homePage");
-    page->setStyleSheet(R"(
-        QWidget#homePage {
-            background-color: #F7F8FC;
-        }
-    )");
-
+    page->setStyleSheet(QString("background-color: %1;").arg(AppStyle::Background));
     QVBoxLayout *pageLayout = new QVBoxLayout(page);
     pageLayout->setContentsMargins(0, 0, 0, 0);
     pageLayout->setSpacing(0);
@@ -149,594 +89,437 @@ void HomeWindow::setupUI()
     pageLayout->addWidget(createNavigationBar());
 
     QWidget *content = new QWidget();
-    content->setObjectName("contentWrapper");
-    content->setStyleSheet(R"(
-        QWidget#contentWrapper {
-            background-color: #F7F8FC;
-        }
-    )");
-
+    content->setStyleSheet(QString("background-color: %1;").arg(AppStyle::Background));
     QVBoxLayout *contentLayout = new QVBoxLayout(content);
-    contentLayout->setContentsMargins(32, 28, 32, 40);
-    contentLayout->setSpacing(0);
+    contentLayout->setContentsMargins(40, 32, 40, 48);
+    contentLayout->setSpacing(36);
 
     contentLayout->addWidget(createHeroSection());
-    contentLayout->addSpacing(35);
     contentLayout->addWidget(createCategorySection());
-    contentLayout->addSpacing(38);
     contentLayout->addWidget(createRecentlyListedSection());
-    contentLayout->addSpacing(42);
     contentLayout->addWidget(createSellSection());
-    contentLayout->addSpacing(42);
-    contentLayout->addWidget(createWhySection());
-    contentLayout->addSpacing(42);
     contentLayout->addWidget(createFooter());
 
     pageLayout->addWidget(content, 1);
+    homeScrollArea->setWidget(page);
 
-    scrollArea->setWidget(page);
+    mainStackedWidget->addWidget(homeScrollArea);
+    mainStackedWidget->setCurrentWidget(homeScrollArea);
 
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
-    mainLayout->setSpacing(0);
-    mainLayout->addWidget(scrollArea);
+    mainLayout->addWidget(mainStackedWidget);
 }
 
+void HomeWindow::pushPage(QWidget *page)
+{
+    if (!page || !mainStackedWidget) return;
+    mainStackedWidget->addWidget(page);
+    mainStackedWidget->setCurrentWidget(page);
+}
 
-// =========================================================
-// NAVIGATION BAR
-// =========================================================
+void HomeWindow::popPage()
+{
+    if (!mainStackedWidget || mainStackedWidget->count() <= 1) return;
+    QWidget *current = mainStackedWidget->currentWidget();
+    if (current && current != homeScrollArea) {
+        mainStackedWidget->removeWidget(current);
+        current->deleteLater();
+    }
+    QWidget *now = mainStackedWidget->currentWidget();
+    if (now == homeScrollArea) {
+        refreshRecentBooks();
+        refreshCartCount();
+    }
+}
 
 QWidget* HomeWindow::createNavigationBar()
 {
     QFrame *nav = new QFrame();
     nav->setObjectName("navigationBar");
-    nav->setFixedHeight(76);
+    nav->setFixedHeight(72);
     nav->setStyleSheet(R"(
         QFrame#navigationBar {
-            background-color: white;
-            border-bottom: 1px solid #E6E8EF;
+            background-color: #FFFFFF;
+            border-bottom: 1px solid #E2E8F0;
         }
     )");
-
-    // A faint shadow under the nav bar separates it from scrolled
-    // content beneath it, like a real app's sticky header.
-    applyElevation(nav, 20, 3, 18);
+    AppStyle::applyElevation(nav, 16, 2, 15);
 
     QHBoxLayout *layout = new QHBoxLayout(nav);
-    layout->setContentsMargins(32, 10, 32, 10);
-    layout->setSpacing(6);
+    layout->setContentsMargins(36, 10, 36, 10);
+    layout->setSpacing(8);
 
     QLabel *logo = new QLabel("BookBazzar");
-    logo->setStyleSheet(R"(
-        QLabel {
-            color: #172033;
-            font-size: 25px;
-            font-weight: 800;
-        }
-    )");
+    logo->setStyleSheet(QString("color: %1; font-size: 22px; font-weight: 800;").arg(AppStyle::TextPrimary));
     layout->addWidget(logo);
 
-    QLabel *dot = new QLabel(".");
-    dot->setStyleSheet(R"(
-        QLabel {
-            color: #5B5FEF;
-            font-size: 30px;
-            font-weight: 800;
-        }
-    )");
+    QLabel *dot = new QLabel("•");
+    dot->setStyleSheet(QString("color: %1; font-size: 24px; font-weight: 900; margin-right: 16px;").arg(AppStyle::Primary));
     layout->addWidget(dot);
-    layout->addSpacing(30);
 
-    auto createNavButton = [](const QString &text)
-    {
-        QPushButton *button = new QPushButton(text);
-        button->setMinimumHeight(40);
-        button->setStyleSheet(R"(
-            QPushButton {
-                background: transparent;
-                border: none;
-                color: #4B5563;
-                padding: 0 12px;
-                font-size: 14px;
-                font-weight: 600;
-                border-radius: 8px;
-            }
-            QPushButton:hover {
-                color: #4F46E5;
-                background-color: #F3F4FF;
-            }
-            QPushButton:pressed {
-                background-color: #E9E7FF;
-            }
-        )");
-        return button;
+    auto createNavBtn = [](const QString &text) {
+        QPushButton *btn = new QPushButton(text);
+        btn->setMinimumHeight(38);
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setStyleSheet(AppStyle::navButtonStyle());
+        return btn;
     };
 
-    QPushButton *browseButton = createNavButton("Browse Books");
-    QPushButton *sellButton = createNavButton("Sell Your Book");
-    QPushButton *listingButton = createNavButton("My Listings");
-    QPushButton *ordersButton = createNavButton("My Orders");
-    exchangesButton = createNavButton("Exchanges");
-    cartButton = createNavButton("Cart (0)");
+    QPushButton *browseBtn = createNavBtn("Browse Books");
+    QPushButton *sellBtn = createNavBtn("Sell Your Book");
+    QPushButton *listingBtn = createNavBtn("My Listings");
+    QPushButton *ordersBtn = createNavBtn("My Orders");
+    exchangesButton = createNavBtn("Exchanges");
+    cartButton = createNavBtn("Cart (0)");
 
-    layout->addWidget(browseButton);
-    layout->addWidget(sellButton);
-    layout->addWidget(listingButton);
-    layout->addWidget(ordersButton);
+    layout->addWidget(browseBtn);
+    layout->addWidget(sellBtn);
+    layout->addWidget(listingBtn);
+    layout->addWidget(ordersBtn);
     layout->addWidget(exchangesButton);
     layout->addWidget(cartButton);
     layout->addStretch();
 
     const QString displayName = SessionManager::instance().username().isEmpty() ? userName : SessionManager::instance().username();
-    QLabel *userLabel = new QLabel("Hello, " + displayName);
-    userLabel->setStyleSheet(R"(
-        QLabel {
-            color: #374151;
-            font-size: 14px;
-            font-weight: 600;
-            padding: 0 12px;
-        }
-    )");
-    layout->addWidget(userLabel);
-
-    logoutButton = new QPushButton("Logout");
-    logoutButton->setMinimumSize(90, 40);
-    logoutButton->setStyleSheet(R"(
+    profileButton = new QPushButton(QString("👤  %1").arg(displayName));
+    profileButton->setCursor(Qt::PointingHandCursor);
+    profileButton->setStyleSheet(QString(R"(
         QPushButton {
-            background-color: #F8F9FC;
-            color: #374151;
-            border: 1px solid #E1E4EA;
-            border-radius: 9px;
+            background-color: %1;
+            color: %2;
+            border: 1px solid %3;
+            border-radius: 20px;
+            padding: 6px 16px;
             font-size: 13px;
-            font-weight: 700;
+            font-weight: 600;
         }
         QPushButton:hover {
-            background-color: #FEECEC;
-            color: #DC2626;
-            border-color: #FECACA;
+            background-color: #E0E7FF;
+            color: %4;
         }
-        QPushButton:pressed {
-            background-color: #FDE2E2;
+    )").arg(AppStyle::PrimaryLight, AppStyle::Primary, AppStyle::PrimaryBorder, AppStyle::PrimaryActive));
+    layout->addWidget(profileButton);
+
+    logoutButton = new QPushButton("Logout");
+    logoutButton->setCursor(Qt::PointingHandCursor);
+    logoutButton->setMinimumSize(82, 36);
+    logoutButton->setStyleSheet(QString(R"(
+        QPushButton {
+            background-color: %1;
+            color: %2;
+            border: 1px solid %3;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 12px;
         }
-    )");
+        QPushButton:hover {
+            background-color: %4;
+            color: %5;
+            border-color: %6;
+        }
+    )").arg(AppStyle::SurfaceSubtle, AppStyle::TextSecondary, AppStyle::BorderSubtle,
+           AppStyle::DangerLight, AppStyle::DangerText, AppStyle::DangerBorder));
     layout->addWidget(logoutButton);
 
-    connect(browseButton, &QPushButton::clicked, this, &HomeWindow::handleBrowseBooks);
-    connect(sellButton, &QPushButton::clicked, this, &HomeWindow::handleSellBook);
-    connect(listingButton, &QPushButton::clicked, this, &HomeWindow::handleListings);
-    connect(ordersButton, &QPushButton::clicked, this, &HomeWindow::handleOrders);
+    connect(browseBtn, &QPushButton::clicked, this, &HomeWindow::handleBrowseBooks);
+    connect(sellBtn, &QPushButton::clicked, this, &HomeWindow::handleSellBook);
+    connect(listingBtn, &QPushButton::clicked, this, &HomeWindow::handleListings);
+    connect(ordersBtn, &QPushButton::clicked, this, &HomeWindow::handleOrders);
     connect(exchangesButton, &QPushButton::clicked, this, &HomeWindow::handleExchanges);
     connect(cartButton, &QPushButton::clicked, this, &HomeWindow::handleCart);
+    connect(profileButton, &QPushButton::clicked, this, &HomeWindow::showUserProfile);
     connect(logoutButton, &QPushButton::clicked, this, &HomeWindow::handleLogout);
 
     return nav;
 }
 
-
-// =========================================================
-// HERO SECTION
-// =========================================================
-
 QWidget* HomeWindow::createHeroSection()
 {
     QFrame *hero = new QFrame();
     hero->setObjectName("heroSection");
-    hero->setMinimumHeight(380);
     hero->setStyleSheet(R"(
         QFrame#heroSection {
-            background-color: #171D2D;
-            border-radius: 24px;
-        }
-    )");
-
-    QHBoxLayout *layout = new QHBoxLayout(hero);
-    layout->setContentsMargins(55, 45, 45, 45);
-    layout->setSpacing(40);
-
-    QVBoxLayout *left = new QVBoxLayout();
-    left->setSpacing(0);
-
-    QLabel *smallTitle = new QLabel("THE SMARTER WAY TO BUY & SELL BOOKS");
-    smallTitle->setStyleSheet(R"(
-        QLabel {
-            color: #A5B4FC;
-            font-size: 11px;
-            font-weight: 800;
-        }
-    )");
-    left->addWidget(smallTitle);
-    left->addSpacing(14);
-
-    QLabel *heading = new QLabel(
-        "Find your next book.\n"
-        "Give your old ones a new life."
-        );
-    heading->setWordWrap(true);
-    heading->setStyleSheet(R"(
-        QLabel {
-            color: white;
-            font-size: 38px;
-            font-weight: 800;
-        }
-    )");
-    left->addWidget(heading);
-    left->addSpacing(15);
-
-    QLabel *description = new QLabel(
-        "Discover affordable books from students, "
-        "readers and collectors around you — "
-        "or sell books you no longer need."
-        );
-    description->setWordWrap(true);
-    description->setMaximumWidth(650);
-    description->setStyleSheet(R"(
-        QLabel {
-            color: #C9D1E0;
-            font-size: 14px;
-        }
-    )");
-    left->addWidget(description);
-    left->addSpacing(25);
-
-    QHBoxLayout *searchLayout = new QHBoxLayout();
-    searchLayout->setSpacing(8);
-
-    searchEdit = new QLineEdit();
-    searchEdit->setPlaceholderText("Search by title, author or ISBN...");
-    searchEdit->setMinimumHeight(52);
-    searchEdit->setStyleSheet(R"(
-        QLineEdit {
-            background-color: white;
-            color: #111827;
-            border: 2px solid transparent;
-            border-radius: 11px;
-            padding: 0 18px;
-            font-size: 13px;
-        }
-        QLineEdit:focus {
-            border: 2px solid #818CF8;
-        }
-    )");
-
-    searchButton = new QPushButton("Search");
-    searchButton->setMinimumSize(105, 52);
-    searchButton->setStyleSheet(R"(
-        QPushButton {
-            background-color: #6366F1;
-            color: white;
-            border: none;
-            border-radius: 11px;
-            font-size: 13px;
-            font-weight: 800;
-        }
-        QPushButton:hover {
-            background-color: #818CF8;
-        }
-        QPushButton:pressed {
-            background-color: #4F46E5;
-        }
-    )");
-
-    searchLayout->addWidget(searchEdit, 1);
-    searchLayout->addWidget(searchButton);
-    left->addLayout(searchLayout);
-    left->addSpacing(20);
-
-    QHBoxLayout *buttons = new QHBoxLayout();
-    buttons->setSpacing(10);
-
-    QPushButton *browse = createPrimaryButton("Browse Books");
-    QPushButton *sell = createSecondaryButton("+ Sell Your Book");
-
-    buttons->addWidget(browse);
-    buttons->addWidget(sell);
-    buttons->addStretch();
-
-    left->addLayout(buttons);
-
-    layout->addLayout(left, 3);
-
-    QFrame *visual = new QFrame();
-    visual->setMinimumWidth(300);
-    visual->setMaximumWidth(430);
-    visual->setStyleSheet(R"(
-        QFrame {
-            background-color: #202940;
-            border: 1px solid #303A56;
+            background-color: #0F172A;
             border-radius: 20px;
         }
-    )");
-
-    QVBoxLayout *visualLayout = new QVBoxLayout(visual);
-    visualLayout->setContentsMargins(25, 22, 25, 22);
-
-    QLabel *visualTitle = new QLabel("DISCOVER • READ • REPEAT");
-    visualTitle->setAlignment(Qt::AlignCenter);
-    visualTitle->setStyleSheet(R"(
         QLabel {
-            color: #9DA8C1;
-            font-size: 10px;
-            font-weight: 800;
+            background: transparent;
+            border: none;
         }
     )");
-    visualLayout->addWidget(visualTitle);
-    visualLayout->addStretch();
+    AppStyle::applyElevation(hero, 28, 8, 25);
 
-    // Hero "books" now use the same generated-cover look as the real
-    // book cards, instead of flat solid rectangles, so this panel
-    // reads as book covers at a glance rather than colored blocks.
-    QHBoxLayout *books = new QHBoxLayout();
-    books->setSpacing(12);
-    books->setAlignment(Qt::AlignCenter);
+    QVBoxLayout *layout = new QVBoxLayout(hero);
+    layout->setContentsMargins(56, 44, 56, 44);
+    layout->setSpacing(20);
 
-    auto addHeroBook = [this, books](const QString &title,
-                                     const QString &author,
-                                     int width,
-                                     int height)
-    {
-        QLabel *cover = new QLabel();
-        cover->setFixedSize(width, height);
-        cover->setPixmap(loadOrGenerateCover("", title, author, width, height));
+    QLabel *badge = new QLabel("THE SMARTER WAY TO BUY & SELL BOOKS");
+    badge->setStyleSheet("background: transparent; border: none; color: #818CF8; font-size: 11px; font-weight: 800; letter-spacing: 1px;");
 
-        QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect(cover);
-        shadow->setBlurRadius(18);
-        shadow->setOffset(0, 5);
-        shadow->setColor(QColor(0, 0, 0, 90));
-        cover->setGraphicsEffect(shadow);
+    QLabel *heading = new QLabel("Find your next book.\nGive your old ones a new life.");
+    heading->setWordWrap(true);
+    heading->setStyleSheet("background: transparent; border: none; color: #FFFFFF; font-size: 34px; font-weight: 800; line-height: 1.2;");
 
-        books->addWidget(cover);
-    };
+    QLabel *desc = new QLabel("Discover affordable textbooks, novels, and classics from readers near you — or list books you no longer need in seconds.");
+    desc->setWordWrap(true);
+    desc->setMaximumWidth(750);
+    desc->setStyleSheet("background: transparent; border: none; color: #94A3B8; font-size: 14px; line-height: 1.5;");
 
-    addHeroBook("Atomic Habits", "James Clear", 85, 135);
-    addHeroBook("C++ Programming", "Bjarne Stroustrup", 95, 155);
-    addHeroBook("The Alchemist", "Paulo Coelho", 82, 128);
+    QHBoxLayout *searchRow = new QHBoxLayout();
+    searchRow->setSpacing(8);
 
-    visualLayout->addLayout(books);
-    visualLayout->addStretch();
+    searchEdit = new QLineEdit();
+    searchEdit->setPlaceholderText("Search by book title, author, or ISBN...");
+    searchEdit->setMinimumHeight(48);
+    searchEdit->setStyleSheet(QString(R"(
+        QLineEdit {
+            background-color: #FFFFFF;
+            color: #0F172A;
+            border: 2px solid transparent;
+            border-radius: 10px;
+            padding: 0 16px;
+            font-size: 14px;
+        }
+        QLineEdit:focus {
+            border: 2px solid %1;
+        }
+    )").arg(AppStyle::Primary));
 
-    QLabel *visualText = new QLabel(
-        "Thousands of stories.\n"
-        "One place to find them."
-        );
-    visualText->setAlignment(Qt::AlignCenter);
-    visualText->setStyleSheet(R"(
-        QLabel {
-            color: #D5DAE7;
+    searchButton = new QPushButton("Search Books");
+    searchButton->setMinimumSize(130, 48);
+    searchButton->setCursor(Qt::PointingHandCursor);
+    searchButton->setStyleSheet(AppStyle::primaryButtonStyle());
+
+    searchRow->addWidget(searchEdit, 1);
+    searchRow->addWidget(searchButton);
+
+    QHBoxLayout *actionsRow = new QHBoxLayout();
+    actionsRow->setSpacing(12);
+
+    QPushButton *browseBtn = new QPushButton("Browse All Books");
+    browseBtn->setMinimumHeight(42);
+    browseBtn->setCursor(Qt::PointingHandCursor);
+    browseBtn->setStyleSheet(QString(R"(
+        QPushButton {
+            background-color: %1;
+            color: #FFFFFF;
+            border: none;
+            border-radius: 8px;
             font-size: 13px;
             font-weight: 600;
+            padding: 8px 20px;
+        }
+        QPushButton:hover {
+            background-color: %2;
+        }
+    )").arg(AppStyle::Primary, AppStyle::PrimaryHover));
+
+    QPushButton *sellBtn = new QPushButton("+ Sell Your Book");
+    sellBtn->setMinimumHeight(42);
+    sellBtn->setCursor(Qt::PointingHandCursor);
+    sellBtn->setStyleSheet(R"(
+        QPushButton {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: #FFFFFF;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 8px 20px;
+        }
+        QPushButton:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.4);
         }
     )");
-    visualLayout->addWidget(visualText);
 
-    layout->addWidget(visual, 1);
+    actionsRow->addWidget(browseBtn);
+    actionsRow->addWidget(sellBtn);
+    actionsRow->addStretch();
+
+    layout->addWidget(badge);
+    layout->addWidget(heading);
+    layout->addWidget(desc);
+    layout->addSpacing(4);
+    layout->addLayout(searchRow);
+    layout->addSpacing(6);
+    layout->addLayout(actionsRow);
 
     connect(searchButton, &QPushButton::clicked, this, &HomeWindow::handleSearch);
     connect(searchEdit, &QLineEdit::returnPressed, this, &HomeWindow::handleSearch);
-    connect(browse, &QPushButton::clicked, this, &HomeWindow::handleBrowseBooks);
-    connect(sell, &QPushButton::clicked, this, &HomeWindow::handleSellBook);
+    connect(browseBtn, &QPushButton::clicked, this, &HomeWindow::handleBrowseBooks);
+    connect(sellBtn, &QPushButton::clicked, this, &HomeWindow::handleSellBook);
 
     return hero;
 }
 
-
-// =========================================================
-// CATEGORY SECTION
-// =========================================================
-
 QWidget* HomeWindow::createCategorySection()
 {
     QWidget *section = new QWidget();
-
     QVBoxLayout *layout = new QVBoxLayout(section);
     layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(14);
 
     QHBoxLayout *header = new QHBoxLayout();
     header->addWidget(createSectionTitle("Explore Categories"));
     header->addStretch();
-
-    QLabel *sub = new QLabel("Find books that match your interests");
-    sub->setStyleSheet(R"(
-        QLabel {
-            color: #9CA3AF;
-            font-size: 12px;
-        }
-    )");
+    QLabel *sub = new QLabel("Click any category to filter available listings");
+    sub->setStyleSheet(QString("color: %1; font-size: 13px;").arg(AppStyle::TextMuted));
     header->addWidget(sub);
-
     layout->addLayout(header);
-    layout->addSpacing(16);
 
-    QHBoxLayout *categories = new QHBoxLayout();
-    categories->setSpacing(12);
+    QHBoxLayout *categoriesRow = new QHBoxLayout();
+    categoriesRow->setSpacing(12);
 
-    QStringList categoryNames = {
-        "Academic", "Programming", "Engineering", "Fiction",
-        "Competitive Exams", "School", "Novels"
+    struct CatInfo {
+        QString name;
+        QString icon;
     };
 
-    QStringList categoryIcons = {
-        "A", "{ }", "E", "F", "C", "S", "N"
+    QVector<CatInfo> cats = {
+        {"Academic", "📚"},
+        {"Programming", "💻"},
+        {"Engineering", "⚙️"},
+        {"Fiction", "✨"},
+        {"Competitive Exams", "🎯"},
+        {"School", "🏫"},
+        {"Novels", "📖"}
     };
 
-    for (int i = 0; i < categoryNames.size(); ++i)
-    {
-        QFrame *card = new QFrame();
-        card->setMinimumHeight(72);
-        card->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        card->setStyleSheet(R"(
-            QFrame {
-                background-color: white;
-                border: 1px solid #E5E7EB;
-                border-radius: 13px;
+    for (const auto &cat : cats) {
+        QPushButton *chip = new QPushButton(QString("%1  %2").arg(cat.icon, cat.name));
+        chip->setMinimumHeight(46);
+        chip->setCursor(Qt::PointingHandCursor);
+        chip->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        chip->setStyleSheet(QString(R"(
+            QPushButton {
+                background-color: #FFFFFF;
+                color: %1;
+                border: 1px solid %2;
+                border-radius: 12px;
+                font-size: 12px;
+                font-weight: 600;
+                padding: 6px 12px;
             }
-        )");
-
-        applyElevation(card, 16, 4, 12);
-
-        QVBoxLayout *cardLayout = new QVBoxLayout(card);
-        cardLayout->setContentsMargins(10, 10, 10, 8);
-        cardLayout->setSpacing(5);
-
-        QLabel *icon = new QLabel(categoryIcons[i]);
-        icon->setAlignment(Qt::AlignCenter);
-        icon->setStyleSheet(R"(
-            QLabel {
-                color: #4F46E5;
-                font-size: 15px;
-                font-weight: 900;
+            QPushButton:hover {
+                border-color: %3;
+                background-color: %4;
+                color: %5;
             }
-        )");
-
-        QLabel *name = new QLabel(categoryNames[i]);
-        name->setAlignment(Qt::AlignCenter);
-        name->setStyleSheet(R"(
-            QLabel {
-                color: #374151;
-                font-size: 11px;
-                font-weight: 700;
+            QPushButton:pressed {
+                background-color: #E0E7FF;
             }
-        )");
+        )").arg(AppStyle::TextPrimary, AppStyle::BorderSubtle, AppStyle::Primary, AppStyle::PrimaryLight, AppStyle::Primary));
 
-        cardLayout->addWidget(icon);
-        cardLayout->addWidget(name);
+        AppStyle::applyElevation(chip, 12, 3, 10);
 
-        categories->addWidget(card);
+        const QString categoryName = cat.name;
+        connect(chip, &QPushButton::clicked, this, [this, categoryName]() {
+            handleBrowseWithCategory(categoryName);
+        });
+
+        categoriesRow->addWidget(chip);
     }
 
-    layout->addLayout(categories);
-
+    layout->addLayout(categoriesRow);
     return section;
 }
-
-
-// =========================================================
-// RECENTLY LISTED
-// =========================================================
 
 QWidget* HomeWindow::createRecentlyListedSection()
 {
     QWidget *section = new QWidget();
-
     QVBoxLayout *layout = new QVBoxLayout(section);
     layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(16);
 
     QHBoxLayout *header = new QHBoxLayout();
     header->addWidget(createSectionTitle("Recently Listed Books"));
     header->addStretch();
 
     QPushButton *viewAll = new QPushButton("View all  →");
-    viewAll->setStyleSheet(R"(
+    viewAll->setCursor(Qt::PointingHandCursor);
+    viewAll->setStyleSheet(QString(R"(
         QPushButton {
             background: transparent;
             border: none;
-            color: #4F46E5;
+            color: %1;
             font-size: 13px;
-            font-weight: 800;
-            padding: 8px;
+            font-weight: 700;
+            padding: 6px 12px;
         }
         QPushButton:hover {
-            color: #3730A3;
+            color: %2;
         }
-    )");
-
+    )").arg(AppStyle::Primary, AppStyle::PrimaryHover));
     header->addWidget(viewAll);
     layout->addLayout(header);
-    layout->addSpacing(17);
 
     recentBooksLayout = new QVBoxLayout();
     recentBooksLayout->setContentsMargins(0, 0, 0, 0);
     recentBooksLayout->setSpacing(16);
 
     refreshRecentBooks();
-
     layout->addLayout(recentBooksLayout);
 
     connect(viewAll, &QPushButton::clicked, this, &HomeWindow::handleBrowseBooks);
-
     return section;
 }
 
-
-// =========================================================
-// REFRESH RECENT BOOKS
-// =========================================================
-
 void HomeWindow::refreshRecentBooks()
 {
-    if (!recentBooksLayout)
-    {
-        return;
-    }
+    if (!recentBooksLayout) return;
 
     auto *reply = ApiClient::instance().getPublic(QStringLiteral("/api/books"), QUrlQuery("limit=8&sort=newest"));
-    connect(reply, &QNetworkReply::finished, this, [this, reply]()
-    {
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
         reply->deleteLater();
 
         if (!recentBooksLayout) return;
 
         QLayoutItem *item;
-        while ((item = recentBooksLayout->takeAt(0)) != nullptr)
-        {
-            if (item->widget())
-            {
+        while ((item = recentBooksLayout->takeAt(0)) != nullptr) {
+            if (item->widget()) {
                 delete item->widget();
                 delete item;
-            }
-            else if (item->layout())
-            {
+            } else if (item->layout()) {
                 QLayout *subLayout = item->layout();
                 QLayoutItem *subItem;
-                while ((subItem = subLayout->takeAt(0)) != nullptr)
-                {
-                    if (subItem->widget())
-                    {
-                        delete subItem->widget();
-                    }
+                while ((subItem = subLayout->takeAt(0)) != nullptr) {
+                    if (subItem->widget()) delete subItem->widget();
                     delete subItem;
                 }
                 delete subLayout;
-            }
-            else
-            {
+            } else {
                 delete item;
             }
         }
 
         const QJsonArray booksArr = json.value(QStringLiteral("books")).toArray();
-
-        if (!ok || booksArr.isEmpty())
-        {
-            QLabel *empty = new QLabel(
-                "No books have been listed yet.\n\n"
-                "Be the first person to sell a book!"
-                );
+        if (!ok || booksArr.isEmpty()) {
+            QLabel *empty = new QLabel("No books have been listed yet.\nBe the first person to sell a book!");
             empty->setAlignment(Qt::AlignCenter);
-            empty->setMinimumHeight(180);
-            empty->setStyleSheet(R"(
+            empty->setMinimumHeight(160);
+            empty->setStyleSheet(QString(R"(
                 QLabel {
-                    background-color: white;
-                    border: 1px solid #E5E7EB;
-                    border-radius: 15px;
-                    color: #6B7280;
+                    background-color: #FFFFFF;
+                    border: 1px solid %1;
+                    border-radius: 12px;
+                    color: %2;
                     font-size: 14px;
                     font-weight: 600;
                 }
-            )");
-
+            )").arg(AppStyle::BorderSubtle, AppStyle::TextSecondary));
             recentBooksLayout->addWidget(empty);
             return;
         }
 
         QHBoxLayout *row = new QHBoxLayout();
         row->setSpacing(16);
-
         int count = 0;
 
-        for (const auto &v : booksArr)
-        {
+        for (const auto &v : booksArr) {
             BookModel b = BookModel::fromJson(v.toObject());
             QFrame *card = createBookCard(
                 b.id,
@@ -746,13 +529,12 @@ void HomeWindow::refreshRecentBooks()
                 QString("₹%1").arg(QString::number(b.price, 'f', 0)),
                 b.category,
                 b.coverImage
-                );
+            );
 
             row->addWidget(card);
             ++count;
 
-            if (count == 4)
-            {
+            if (count == 4) {
                 recentBooksLayout->addLayout(row);
                 row = new QHBoxLayout();
                 row->setSpacing(16);
@@ -760,29 +542,14 @@ void HomeWindow::refreshRecentBooks()
             }
         }
 
-        if (count > 0)
-        {
+        if (count > 0) {
             row->addStretch();
             recentBooksLayout->addLayout(row);
-        }
-        else
-        {
+        } else {
             delete row;
         }
     });
 }
-
-
-// =========================================================
-// COVER ART
-// =========================================================
-// Tries to load a real cover image first. If none exists yet,
-// generates a clean, book-jacket-style placeholder instead of a
-// flat color box with initials - gradient background (color picked
-// consistently per title so the same book always looks the same),
-// a spine accent, a faint watermark, and the actual title/author
-// text laid out like a real cover. No copyrighted art involved -
-// this is drawn entirely in code.
 
 QPixmap HomeWindow::loadOrGenerateCover(
     const QString &imagePath,
@@ -790,23 +557,14 @@ QPixmap HomeWindow::loadOrGenerateCover(
     const QString &author,
     int width,
     int height
-    )
+)
 {
-    if (!imagePath.isEmpty())
-    {
+    if (!imagePath.isEmpty()) {
         QFileInfo info(imagePath);
-
-        if (info.exists())
-        {
+        if (info.exists()) {
             QPixmap real(imagePath);
-
-            if (!real.isNull())
-            {
-                return real.scaled(
-                    width, height,
-                    Qt::KeepAspectRatio,
-                    Qt::SmoothTransformation
-                    );
+            if (!real.isNull()) {
+                return real.scaled(width, height, Qt::KeepAspectRatio, Qt::SmoothTransformation);
             }
         }
     }
@@ -818,15 +576,13 @@ QPixmap HomeWindow::loadOrGenerateCover(
     painter.setRenderHint(QPainter::Antialiasing);
 
     static const QVector<QPair<QColor, QColor>> palette = {
-                                                            { QColor("#6366F1"), QColor("#3730A3") },
-                                                            { QColor("#F59E0B"), QColor("#B45309") },
-                                                            { QColor("#10B981"), QColor("#047857") },
-                                                            { QColor("#EC4899"), QColor("#9D174D") },
-                                                            { QColor("#3B82F6"), QColor("#1E40AF") },
-                                                            { QColor("#8B5CF6"), QColor("#5B21B6") },
-                                                            { QColor("#EF4444"), QColor("#991B1B") },
-                                                            { QColor("#14B8A6"), QColor("#115E59") },
-                                                            };
+        { QColor("#4F46E5"), QColor("#312E81") },
+        { QColor("#0D9488"), QColor("#115E59") },
+        { QColor("#2563EB"), QColor("#1E3A8A") },
+        { QColor("#7C3AED"), QColor("#4C1D95") },
+        { QColor("#D97706"), QColor("#78350F") },
+        { QColor("#DC2626"), QColor("#7F1D1D") }
+    };
 
     const uint hash = qHash(title + author);
     const auto colors = palette[hash % static_cast<uint>(palette.size())];
@@ -840,39 +596,27 @@ QPixmap HomeWindow::loadOrGenerateCover(
     painter.setBrush(gradient);
     painter.drawRoundedRect(fullRect, 8, 8);
 
-    // Spine accent along the left edge.
-    painter.setBrush(QColor(255, 255, 255, 45));
-    painter.drawRect(0, 0, qMax(3, width / 22), height);
+    // Spine
+    painter.setBrush(QColor(255, 255, 255, 40));
+    painter.drawRect(0, 0, qMax(4, width / 20), height);
 
-    // Faint open-book watermark, purely decorative.
-    QFont iconFont = painter.font();
-    iconFont.setPointSize(qMax(10, height / 5));
-    painter.setFont(iconFont);
-    painter.setPen(QColor(255, 255, 255, 30));
-    painter.drawText(fullRect, Qt::AlignCenter, QString::fromUtf8("\U0001F4D6"));
-
-    // Title, word-wrapped and centered in the upper portion.
-    QFont titleFont("Segoe UI", qMax(8, width / 13), QFont::Bold);
+    // Title
+    QFont titleFont(AppStyle::appFont(), qMax(8, width / 12), QFont::Bold);
     painter.setFont(titleFont);
     painter.setPen(Qt::white);
-    QRectF titleRect(width * 0.08, height * 0.14, width * 0.84, height * 0.52);
+    QRectF titleRect(width * 0.1, height * 0.16, width * 0.8, height * 0.50);
     painter.drawText(titleRect, Qt::AlignHCenter | Qt::AlignVCenter | Qt::TextWordWrap, title);
 
-    // Author, smaller, near the bottom.
-    QFont authorFont("Segoe UI", qMax(6, width / 16));
+    // Author
+    QFont authorFont(AppStyle::appFont(), qMax(7, width / 16));
     painter.setFont(authorFont);
-    painter.setPen(QColor(255, 255, 255, 215));
-    QRectF authorRect(width * 0.08, height * 0.80, width * 0.84, height * 0.16);
+    painter.setPen(QColor(255, 255, 255, 210));
+    QRectF authorRect(width * 0.1, height * 0.78, width * 0.8, height * 0.16);
     painter.drawText(authorRect, Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap, author);
 
     painter.end();
     return pixmap;
 }
-
-
-// =========================================================
-// BOOK CARD
-// =========================================================
 
 QFrame* HomeWindow::createBookCard(
     const QString &bookId,
@@ -880,556 +624,376 @@ QFrame* HomeWindow::createBookCard(
     const QString &author,
     const QString &condition,
     const QString &price,
-    const QString &location,
+    const QString &category,
     const QString &imagePath
-    )
+)
 {
     QFrame *card = new QFrame();
-
-    card->setMinimumHeight(355);
-    card->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-
-    card->setStyleSheet(R"(
-        QFrame {
-            background-color: white;
-            border: 1px solid #E5E7EB;
-            border-radius: 16px;
+    card->setFixedSize(280, 410);
+    card->setStyleSheet(QString(R"(
+        .QFrame {
+            background-color: #FFFFFF;
+            border: 1px solid %1;
+            border-radius: 14px;
         }
-        QFrame:hover {
-            border-color: #C7D2FE;
-            background-color: #FEFEFF;
+        .QFrame:hover {
+            border-color: %2;
         }
-    )");
-
-    applyElevation(card, 24, 6, 22);
+        QLabel {
+            border: none;
+            background: transparent;
+        }
+    )").arg(AppStyle::BorderSubtle, AppStyle::PrimaryBorder));
+    AppStyle::applyElevation(card, 16, 4, 15);
 
     QVBoxLayout *layout = new QVBoxLayout(card);
-    layout->setContentsMargins(12, 12, 12, 12);
-    layout->setSpacing(7);
+    layout->setContentsMargins(14, 14, 14, 14);
+    layout->setSpacing(8);
 
-    // Real cover if available, otherwise a generated book-jacket-style
-    // placeholder instead of a flat letter box.
-    QLabel *image = new QLabel();
-    image->setFixedHeight(160);
-    image->setAlignment(Qt::AlignCenter);
-    image->setPixmap(loadOrGenerateCover(imagePath, title, author, 125, 155));
-
-    layout->addWidget(image);
-
-    QLabel *titleLabel = new QLabel(title);
-    titleLabel->setWordWrap(true);
-    titleLabel->setMaximumHeight(42);
-    titleLabel->setStyleSheet(R"(
-        QLabel {
-            color: #172033;
-            font-size: 14px;
-            font-weight: 800;
+    // Image container box
+    QFrame *imgBox = new QFrame(card);
+    imgBox->setFixedHeight(220);
+    imgBox->setStyleSheet(QString(R"(
+        QFrame {
+            background-color: #F8FAFC;
+            border: 1px solid %1;
+            border-radius: 10px;
         }
-    )");
+    )").arg(AppStyle::BorderSubtle));
+    QVBoxLayout *imgBoxLayout = new QVBoxLayout(imgBox);
+    imgBoxLayout->setContentsMargins(4, 4, 4, 4);
+    imgBoxLayout->setAlignment(Qt::AlignCenter);
+
+    QLabel *image = new QLabel(imgBox);
+    image->setFixedSize(160, 205);
+    image->setAlignment(Qt::AlignCenter);
+    image->setScaledContents(false);
+
+    QPixmap initialPix = loadOrGenerateCover(imagePath, title, author, 150, 200);
+    image->setPixmap(initialPix);
+    if (!imagePath.isEmpty()) {
+        ImageLoader::instance().load(imagePath, image, QSize(150, 200));
+    }
+    imgBoxLayout->addWidget(image);
+    layout->addWidget(imgBox);
+
+    QLabel *titleLabel = new QLabel(title, card);
+    titleLabel->setWordWrap(true);
+    titleLabel->setFixedHeight(38);
+    titleLabel->setStyleSheet(QString("color: %1; font-size: 13.5px; font-weight: 700; line-height: 1.2;").arg(AppStyle::TextPrimary));
     layout->addWidget(titleLabel);
 
-    QLabel *authorLabel = new QLabel("by " + author);
-    authorLabel->setStyleSheet(R"(
-        QLabel {
-            color: #6B7280;
-            font-size: 11px;
-        }
-    )");
+    QLabel *authorLabel = new QLabel("by " + author, card);
+    authorLabel->setStyleSheet(QString("color: %1; font-size: 11.5px;").arg(AppStyle::TextSecondary));
     layout->addWidget(authorLabel);
 
-    QLabel *conditionLabel = new QLabel(condition);
-    conditionLabel->setAlignment(Qt::AlignCenter);
-    conditionLabel->setMaximumWidth(90);
-    conditionLabel->setStyleSheet(R"(
-        QLabel {
-            background-color: #ECFDF5;
-            color: #047857;
-            border-radius: 6px;
-            padding: 4px 8px;
-            font-size: 10px;
-            font-weight: 800;
-        }
-    )");
-    layout->addWidget(conditionLabel, 0, Qt::AlignLeft);
+    QHBoxLayout *metaRow = new QHBoxLayout();
+    QLabel *condBadge = new QLabel(condition.isEmpty() ? "Good" : condition, card);
+    condBadge->setStyleSheet(AppStyle::statusBadgeStyle(condition.isEmpty() ? "AVAILABLE" : condition));
+    metaRow->addWidget(condBadge);
 
-    QLabel *locationLabel = new QLabel("Location  •  " + location);
-    locationLabel->setStyleSheet(R"(
-        QLabel {
-            color: #9CA3AF;
-            font-size: 10px;
-        }
-    )");
-    layout->addWidget(locationLabel);
-
-    layout->addStretch();
+    QLabel *catLabel = new QLabel("•  " + (category.isEmpty() ? "General" : category), card);
+    catLabel->setStyleSheet(QString("color: %1; font-size: 11px;").arg(AppStyle::TextMuted));
+    metaRow->addWidget(catLabel);
+    metaRow->addStretch();
+    layout->addLayout(metaRow);
 
     QHBoxLayout *bottom = new QHBoxLayout();
-
-    QLabel *priceLabel = new QLabel(price);
-    priceLabel->setStyleSheet(R"(
-        QLabel {
-            color: #111827;
-            font-size: 18px;
-            font-weight: 900;
-        }
-    )");
+    QLabel *priceLabel = new QLabel(price, card);
+    priceLabel->setStyleSheet(QString("color: %1; font-size: 17px; font-weight: 800;").arg(AppStyle::TextPrimary));
     bottom->addWidget(priceLabel);
     bottom->addStretch();
 
-    QPushButton *viewButton = new QPushButton("View Book");
-    viewButton->setMinimumHeight(34);
-    viewButton->setStyleSheet(R"(
-        QPushButton {
-            background-color: #4F46E5;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 0 13px;
-            font-size: 11px;
-            font-weight: 800;
-        }
-        QPushButton:hover {
-            background-color: #4338CA;
-        }
-        QPushButton:pressed {
-            background-color: #3730A3;
-        }
-    )");
+    QPushButton *viewBtn = new QPushButton("View Details", card);
+    viewBtn->setMinimumHeight(34);
+    viewBtn->setCursor(Qt::PointingHandCursor);
+    viewBtn->setStyleSheet(AppStyle::primaryButtonStyle());
+    bottom->addWidget(viewBtn);
 
-    bottom->addWidget(viewButton);
     layout->addLayout(bottom);
 
-    connect(viewButton, &QPushButton::clicked, this, [this, bookId]()
-            {
-                showBookDetails(bookId);
-            });
+    connect(viewBtn, &QPushButton::clicked, this, [this, bookId]() {
+        showBookDetails(bookId);
+    });
 
     return card;
 }
 
-
-// =========================================================
-// SHOW BOOK DETAILS
-// =========================================================
-
 void HomeWindow::showBookDetails(const QString &bookId)
 {
-    BookDetailsWindow *details = new BookDetailsWindow(bookId, userName);
-    details->setAttribute(Qt::WA_DeleteOnClose);
-    connect(details, &BookDetailsWindow::backRequested, details, &QWidget::close);
+    BookDetailsWindow *details = new BookDetailsWindow(bookId, userName, this);
+    connect(details, &BookDetailsWindow::backRequested, this, &HomeWindow::popPage);
     connect(details, &BookDetailsWindow::addToCartRequested, this, [this](const QString &) {
         refreshCartCount();
     });
-    details->show();
-    details->raise();
-    details->activateWindow();
+    pushPage(details);
 }
-
-
-// =========================================================
-// SELL SECTION
-// =========================================================
 
 QWidget* HomeWindow::createSellSection()
 {
     QFrame *section = new QFrame();
-    section->setMinimumHeight(190);
-    section->setStyleSheet(R"(
-        QFrame {
-            background-color: #EEF2FF;
-            border: 1px solid #DDE3FF;
-            border-radius: 20px;
+    section->setStyleSheet(QString(R"(
+        .QFrame {
+            background-color: %1;
+            border: 1px solid %2;
+            border-radius: 16px;
         }
-    )");
+        QLabel {
+            border: none;
+            background: transparent;
+        }
+    )").arg(AppStyle::PrimaryLight, AppStyle::PrimaryBorder));
+    AppStyle::applyElevation(section, 16, 4, 15);
 
     QHBoxLayout *layout = new QHBoxLayout(section);
-    layout->setContentsMargins(38, 30, 38, 30);
+    layout->setContentsMargins(40, 32, 40, 32);
 
     QVBoxLayout *left = new QVBoxLayout();
-
-    QLabel *small = new QLabel("SELL YOUR BOOKS");
-    small->setStyleSheet(R"(
-        QLabel {
-            color: #4F46E5;
-            font-size: 11px;
-            font-weight: 900;
-        }
-    )");
+    QLabel *small = new QLabel("EARN FROM YOUR BOOKSHELF");
+    small->setStyleSheet(QString("background: transparent; border: none; color: %1; font-size: 11px; font-weight: 800; letter-spacing: 1px;").arg(AppStyle::Primary));
     left->addWidget(small);
 
     QLabel *title = new QLabel("Have books you're done with?");
-    title->setStyleSheet(R"(
-        QLabel {
-            color: #172033;
-            font-size: 24px;
-            font-weight: 800;
-        }
-    )");
+    title->setStyleSheet(QString("background: transparent; border: none; color: %1; font-size: 22px; font-weight: 800;").arg(AppStyle::TextPrimary));
     left->addWidget(title);
 
-    QLabel *description = new QLabel(
-        "List your books, choose your price and "
-        "connect with another reader."
-        );
-    description->setWordWrap(true);
-    description->setStyleSheet(R"(
-        QLabel {
-            color: #6B7280;
-            font-size: 13px;
-        }
-    )");
-    left->addWidget(description);
+    QLabel *desc = new QLabel("List your books in under a minute, set your own price, and exchange or sell directly to fellow readers.");
+    desc->setStyleSheet(QString("background: transparent; border: none; color: %1; font-size: 13px;").arg(AppStyle::TextSecondary));
+    left->addWidget(desc);
 
     layout->addLayout(left, 2);
     layout->addStretch();
 
-    QPushButton *sellButton = createPrimaryButton("+ List Your Book");
-    sellButton->setMinimumSize(175, 52);
+    QPushButton *sellBtn = new QPushButton("+ List Your Book Now");
+    sellBtn->setMinimumSize(180, 46);
+    sellBtn->setCursor(Qt::PointingHandCursor);
+    sellBtn->setStyleSheet(AppStyle::primaryButtonStyle());
+    layout->addWidget(sellBtn, 0, Qt::AlignCenter);
 
-    layout->addWidget(sellButton, 0, Qt::AlignCenter);
-
-    connect(sellButton, &QPushButton::clicked, this, &HomeWindow::handleSellBook);
-
+    connect(sellBtn, &QPushButton::clicked, this, &HomeWindow::handleSellBook);
     return section;
 }
-
-
-// =========================================================
-// WHY SECTION
-// =========================================================
-
-QWidget* HomeWindow::createWhySection()
-{
-    QWidget *section = new QWidget();
-
-    QVBoxLayout *layout = new QVBoxLayout(section);
-    layout->setContentsMargins(0, 0, 0, 0);
-
-    QLabel *heading = createSectionTitle("Why BookBazzar?");
-    heading->setAlignment(Qt::AlignCenter);
-    layout->addWidget(heading);
-
-    QLabel *subtitle = new QLabel("A simple marketplace designed for book lovers.");
-    subtitle->setAlignment(Qt::AlignCenter);
-    subtitle->setStyleSheet(R"(
-        QLabel {
-            color: #9CA3AF;
-            font-size: 12px;
-        }
-    )");
-    layout->addWidget(subtitle);
-    layout->addSpacing(22);
-
-    QHBoxLayout *features = new QHBoxLayout();
-    features->setSpacing(18);
-
-    QStringList numbers = { "01", "02", "03" };
-
-    QStringList titles = {
-        "Real Book Listings",
-        "Your Price, Your Choice",
-        "Simple Ordering"
-    };
-
-    QStringList descriptions = {
-        "Discover books listed by real readers "
-        "with their condition and price.",
-
-        "Sellers decide the price of their books "
-        "and control their listings.",
-
-        "Find a book you want and place an order "
-        "in just a few simple steps."
-    };
-
-    for (int i = 0; i < 3; ++i)
-    {
-        QFrame *feature = new QFrame();
-        feature->setMinimumHeight(150);
-        feature->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        feature->setStyleSheet(R"(
-            QFrame {
-                background-color: white;
-                border: 1px solid #E5E7EB;
-                border-radius: 15px;
-            }
-        )");
-
-        applyElevation(feature, 18, 5, 14);
-
-        QVBoxLayout *featureLayout = new QVBoxLayout(feature);
-        featureLayout->setContentsMargins(24, 22, 24, 22);
-
-        QLabel *number = new QLabel(numbers[i]);
-        number->setStyleSheet(R"(
-            QLabel {
-                color: #4F46E5;
-                font-size: 12px;
-                font-weight: 900;
-            }
-        )");
-        featureLayout->addWidget(number);
-
-        QLabel *featureTitle = new QLabel(titles[i]);
-        featureTitle->setStyleSheet(R"(
-            QLabel {
-                color: #172033;
-                font-size: 16px;
-                font-weight: 800;
-            }
-        )");
-        featureLayout->addWidget(featureTitle);
-
-        QLabel *text = new QLabel(descriptions[i]);
-        text->setWordWrap(true);
-        text->setStyleSheet(R"(
-            QLabel {
-                color: #6B7280;
-                font-size: 12px;
-            }
-        )");
-        featureLayout->addWidget(text);
-
-        features->addWidget(feature);
-    }
-
-    layout->addLayout(features);
-
-    return section;
-}
-
-
-// =========================================================
-// FOOTER
-// =========================================================
 
 QWidget* HomeWindow::createFooter()
 {
     QFrame *footer = new QFrame();
-    footer->setMinimumHeight(90);
     footer->setStyleSheet(R"(
-        QFrame {
-            background-color: #171D2D;
-            border-radius: 15px;
+        .QFrame {
+            background-color: #0F172A;
+            border-radius: 14px;
+        }
+        QLabel {
+            border: none;
+            background: transparent;
         }
     )");
 
     QHBoxLayout *layout = new QHBoxLayout(footer);
-    layout->setContentsMargins(28, 20, 28, 20);
+    layout->setContentsMargins(32, 20, 32, 20);
 
     QLabel *logo = new QLabel("BookBazzar");
-    logo->setStyleSheet(R"(
-        QLabel {
-            color: white;
-            font-size: 18px;
-            font-weight: 800;
-        }
-    )");
+    logo->setStyleSheet("color: #FFFFFF; font-size: 16px; font-weight: 800;");
     layout->addWidget(logo);
 
-    QLabel *text = new QLabel("  •  Buy books. Sell books. Give them a new life.");
-    text->setStyleSheet(R"(
-        QLabel {
-            color: #9CA8BD;
-            font-size: 12px;
-        }
-    )");
+    QLabel *text = new QLabel("  •  Community Book Marketplace & Exchange Platform");
+    text->setStyleSheet("color: #94A3B8; font-size: 12px;");
     layout->addWidget(text);
     layout->addStretch();
 
-    QLabel *copyright = new QLabel("BookBazzar Marketplace");
-    copyright->setStyleSheet(R"(
-        QLabel {
-            color: #6F7B91;
-            font-size: 11px;
-        }
-    )");
+    QLabel *copyright = new QLabel("API-Driven Architecture");
+    copyright->setStyleSheet("color: #64748B; font-size: 11px; font-weight: 600;");
     layout->addWidget(copyright);
 
     return footer;
 }
 
-
-// =========================================================
-// PRIMARY BUTTON
-// =========================================================
-
-QPushButton* HomeWindow::createPrimaryButton(const QString &text)
-{
-    QPushButton *button = new QPushButton(text);
-    button->setMinimumHeight(42);
-    button->setStyleSheet(R"(
-        QPushButton {
-            background-color: #5B5FEF;
-            color: white;
-            border: none;
-            border-radius: 9px;
-            padding: 0 20px;
-            font-size: 13px;
-            font-weight: 800;
-        }
-        QPushButton:hover {
-            background-color: #4F46E5;
-        }
-        QPushButton:pressed {
-            background-color: #4338CA;
-        }
-    )");
-
-    return button;
-}
-
-
-// =========================================================
-// SECONDARY BUTTON
-// =========================================================
-
-QPushButton* HomeWindow::createSecondaryButton(const QString &text)
-{
-    QPushButton *button = new QPushButton(text);
-    button->setMinimumHeight(42);
-    button->setStyleSheet(R"(
-        QPushButton {
-            background-color: rgba(255,255,255,0.07);
-            color: white;
-            border: 1px solid #4B556B;
-            border-radius: 9px;
-            padding: 0 20px;
-            font-size: 13px;
-            font-weight: 800;
-        }
-        QPushButton:hover {
-            background-color: rgba(255,255,255,0.14);
-            border-color: #68758D;
-        }
-        QPushButton:pressed {
-            background-color: rgba(255,255,255,0.20);
-        }
-    )");
-
-    return button;
-}
-
-
-// =========================================================
-// SECTION TITLE
-// =========================================================
-
 QLabel* HomeWindow::createSectionTitle(const QString &text)
 {
     QLabel *label = new QLabel(text);
-    label->setStyleSheet(R"(
-        QLabel {
-            color: #172033;
-            font-size: 22px;
-            font-weight: 800;
-        }
-    )");
-
+    label->setStyleSheet(QString("color: %1; font-size: 20px; font-weight: 800;").arg(AppStyle::TextPrimary));
     return label;
 }
-
-
-// =========================================================
-// SEARCH
-// =========================================================
 
 void HomeWindow::handleSearch()
 {
     QString searchText = searchEdit->text().trimmed();
-
-    if (searchText.isEmpty())
-    {
-        QMessageBox::warning(this, "Search", "Please enter a book title, author or ISBN.");
-        searchEdit->setFocus();
-        return;
-    }
-
-    QUrlQuery query;
-    query.addQueryItem(QStringLiteral("search"), searchText);
-    auto *reply = ApiClient::instance().getPublic(QStringLiteral("/api/books"), query);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, searchText]() {
-        auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
-        reply->deleteLater();
-
-        if (!ok || !json.contains(QStringLiteral("books"))) {
-            QMessageBox::warning(this, "Search Error", errorMsg.isEmpty() ? "Search failed." : errorMsg);
-            return;
-        }
-
-        auto arr = json[QStringLiteral("books")].toArray();
-        if (arr.isEmpty()) {
-            QMessageBox::information(this, "No Results", "No books found for:\n\n" + searchText);
-            return;
-        }
-
-        QString message = QString("Found %1 book%2 for \"%3\":\n\n")
-                              .arg(arr.size())
-                              .arg(arr.size() == 1 ? "" : "s")
-                              .arg(searchText);
-        int count = 0;
-        for (const auto &val : arr) {
-            BookModel b = BookModel::fromJson(val.toObject());
-            message += QString("%1. %2 - ₹%3\n   by %4 • %5\n\n")
-                           .arg(++count)
-                           .arg(b.title)
-                           .arg(b.price, 0, 'f', 0)
-                           .arg(b.author)
-                           .arg(b.condition);
-            if (count >= 10) break;
-        }
-        QMessageBox::information(this, "Search Results", message);
+    emit browseBooksRequested(searchText, QString());
+    BrowseWindow *browseWin = new BrowseWindow(userName, QString(), searchText, this);
+    connect(browseWin, &BrowseWindow::backRequested, this, &HomeWindow::popPage);
+    connect(browseWin, &BrowseWindow::bookSelected, this, [this](const QString &bookId) {
+        showBookDetails(bookId);
     });
+    pushPage(browseWin);
 }
-
-
-// =========================================================
-// BROWSE BOOKS
-// =========================================================
 
 void HomeWindow::handleBrowseBooks()
 {
-    emit browseBooksRequested();
+    emit browseBooksRequested(QString(), QString());
+    BrowseWindow *browseWin = new BrowseWindow(userName, QString(), QString(), this);
+    connect(browseWin, &BrowseWindow::backRequested, this, &HomeWindow::popPage);
+    connect(browseWin, &BrowseWindow::bookSelected, this, [this](const QString &bookId) {
+        showBookDetails(bookId);
+    });
+    pushPage(browseWin);
 }
 
-
-// =========================================================
-// SELL BOOK
-// =========================================================
+void HomeWindow::handleBrowseWithCategory(const QString &category)
+{
+    emit browseBooksRequested(QString(), category);
+    BrowseWindow *browseWin = new BrowseWindow(userName, category, QString(), this);
+    connect(browseWin, &BrowseWindow::backRequested, this, &HomeWindow::popPage);
+    connect(browseWin, &BrowseWindow::bookSelected, this, [this](const QString &bookId) {
+        showBookDetails(bookId);
+    });
+    pushPage(browseWin);
+}
 
 void HomeWindow::handleSellBook()
 {
     emit sellBookRequested();
+    SellWindow *sellWin = new SellWindow(userName, this);
+    connect(sellWin, &SellWindow::backRequested, this, &HomeWindow::popPage);
+    connect(sellWin, &SellWindow::bookPublished, this, [this]() {
+        refreshRecentBooks();
+        popPage();
+    });
+    pushPage(sellWin);
 }
-
-
-// =========================================================
-// LISTINGS
-// =========================================================
 
 void HomeWindow::handleListings()
 {
     emit listingsRequested();
+    ListingsWindow *listings = new ListingsWindow(userName, this);
+    connect(listings, &ListingsWindow::backRequested, this, &HomeWindow::popPage);
+    connect(listings, &ListingsWindow::addNewListingRequested, this, [this]() {
+        handleSellBook();
+    });
+    pushPage(listings);
 }
-
-
-// =========================================================
-// ORDERS
-// =========================================================
 
 void HomeWindow::handleOrders()
 {
     emit ordersRequested();
+    OrdersWindow *orders = new OrdersWindow(userName, this);
+    connect(orders, &OrdersWindow::backRequested, this, &HomeWindow::popPage);
+    connect(orders, &OrdersWindow::browseRequested, this, [this]() {
+        popPage();
+        handleBrowseBooks();
+    });
+    connect(orders, &OrdersWindow::orderSelected, this, [this](const QString &orderId) {
+        OrderDetailWindow *detail = new OrderDetailWindow(orderId, this);
+        connect(detail, &OrderDetailWindow::backRequested, this, &HomeWindow::popPage);
+        pushPage(detail);
+    });
+    pushPage(orders);
 }
 
 void HomeWindow::handleCart()
 {
     emit cartRequested();
+    CartWindow *cartWin = new CartWindow(this);
+    connect(cartWin, &CartWindow::backRequested, this, &HomeWindow::popPage);
+    connect(cartWin, &CartWindow::browseRequested, this, [this]() {
+        popPage();
+        handleBrowseBooks();
+    });
+    connect(cartWin, &CartWindow::cartCountChanged, this, &HomeWindow::updateCartBadge);
+    connect(cartWin, &CartWindow::checkoutRequested, this, [this, cartWin]() {
+        CheckoutWindow *checkout = new CheckoutWindow(this);
+        connect(checkout, &CheckoutWindow::backRequested, this, &HomeWindow::popPage);
+        connect(checkout, &CheckoutWindow::orderPlaced, this, [this](const QString &orderId) {
+            popPage(); // pop checkout
+            popPage(); // pop cart
+            refreshCartCount();
+
+            OrderDetailWindow *detail = new OrderDetailWindow(orderId, this);
+            connect(detail, &OrderDetailWindow::backRequested, this, &HomeWindow::popPage);
+            pushPage(detail);
+        });
+        pushPage(checkout);
+    });
+    pushPage(cartWin);
 }
 
 void HomeWindow::handleExchanges()
 {
     emit exchangesRequested();
+    ExchangeWindow *exWin = new ExchangeWindow(this);
+    connect(exWin, &ExchangeWindow::backRequested, this, &HomeWindow::popPage);
+    pushPage(exWin);
+}
+
+void HomeWindow::showUserProfile()
+{
+    auto *reply = ApiClient::instance().get(QStringLiteral("/api/auth/me"));
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
+        reply->deleteLater();
+
+        QDialog dlg(this);
+        dlg.setWindowTitle("BookBazzar - User Profile");
+        dlg.resize(420, 340);
+        dlg.setStyleSheet(QString("background-color: %1;").arg(AppStyle::Background));
+
+        QVBoxLayout *layout = new QVBoxLayout(&dlg);
+        layout->setContentsMargins(28, 28, 28, 28);
+        layout->setSpacing(16);
+
+        QFrame *card = new QFrame(&dlg);
+        card->setStyleSheet(AppStyle::cardStyle());
+        AppStyle::applyElevation(card, 16, 4, 15);
+
+        QVBoxLayout *cardLayout = new QVBoxLayout(card);
+        cardLayout->setContentsMargins(24, 24, 24, 24);
+        cardLayout->setSpacing(12);
+
+        QLabel *heading = new QLabel("Account Profile");
+        heading->setStyleSheet(QString("color: %1; font-size: 18px; font-weight: 800;").arg(AppStyle::TextPrimary));
+        cardLayout->addWidget(heading);
+
+        QJsonObject userObj = json.value(QStringLiteral("user")).toObject();
+        QString uname = userObj.value(QStringLiteral("username")).toString(SessionManager::instance().username());
+        QString email = userObj.value(QStringLiteral("email")).toString("—");
+        QString uid = userObj.value(QStringLiteral("id")).toString(SessionManager::instance().userId());
+        QString role = userObj.value(QStringLiteral("role")).toString("user");
+        QString createdAt = userObj.value(QStringLiteral("createdAt")).toString();
+        if (!createdAt.isEmpty()) {
+            QDateTime dt = QDateTime::fromString(createdAt, Qt::ISODate);
+            if (dt.isValid()) {
+                createdAt = dt.toString("MMM d, yyyy");
+            }
+        } else {
+            createdAt = "Active Member";
+        }
+
+        auto addField = [&cardLayout](const QString &label, const QString &val) {
+            QHBoxLayout *row = new QHBoxLayout();
+            QLabel *l = new QLabel(label);
+            l->setStyleSheet(QString("color: %1; font-size: 13px; font-weight: 600; min-width: 90px;").arg(AppStyle::TextSecondary));
+            QLabel *v = new QLabel(val);
+            v->setStyleSheet(QString("color: %1; font-size: 13px;").arg(AppStyle::TextPrimary));
+            v->setTextInteractionFlags(Qt::TextSelectableByMouse);
+            row->addWidget(l);
+            row->addWidget(v, 1);
+            cardLayout->addLayout(row);
+        };
+
+        addField("Username:", uname);
+        addField("Email:", email);
+        addField("User ID:", uid);
+        addField("Role:", role);
+        addField("Joined:", createdAt);
+
+        layout->addWidget(card);
+
+        QPushButton *closeBtn = new QPushButton("Close");
+        closeBtn->setMinimumHeight(40);
+        closeBtn->setStyleSheet(AppStyle::primaryButtonStyle());
+        connect(closeBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+        layout->addWidget(closeBtn);
+
+        dlg.exec();
+    });
 }
 
 void HomeWindow::refreshCartCount()
@@ -1453,20 +1017,14 @@ void HomeWindow::updateCartBadge(int count)
     }
 }
 
-
-// =========================================================
-// LOGOUT
-// =========================================================
-
 void HomeWindow::handleLogout()
 {
-    QMessageBox::StandardButton result = QMessageBox::question(
-        this, "Logout", "Are you sure you want to logout?",
-        QMessageBox::Yes | QMessageBox::No
-        );
+    bool confirmed = StyledMessageBox::question(
+        this, "Logout", "Are you sure you want to log out of BookBazzar?",
+        "Log Out", "Cancel"
+    );
 
-    if (result == QMessageBox::Yes)
-    {
+    if (confirmed) {
         auto *logoutReply = ApiClient::instance().post(QStringLiteral("/api/auth/logout"), {}, false);
         connect(logoutReply, &QNetworkReply::finished, logoutReply, &QNetworkReply::deleteLater);
         SessionManager::instance().clearSession();

@@ -1,6 +1,7 @@
 #include "windows/CartWindow.h"
 #include "network/ApiClient.h"
 #include "auth/SessionManager.h"
+#include "AppStyle.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -9,13 +10,23 @@
 #include <QScrollArea>
 #include <QFrame>
 #include <QPainter>
-#include <QPainterPath>
-#include <QMessageBox>
+#include "StyledMessageBox.h"
 #include <QFileInfo>
 #include <QNetworkReply>
 
 CartWindow::CartWindow(QWidget *parent)
-    : QWidget(parent)
+    : QWidget(parent),
+    itemsLayout(nullptr),
+    itemsContainer(nullptr),
+    emptyStateWidget(nullptr),
+    scrollArea(nullptr),
+    itemCountLabel(nullptr),
+    subtotalLabel(nullptr),
+    shippingLabel(nullptr),
+    totalLabel(nullptr),
+    unavailableWarningLabel(nullptr),
+    checkoutButton(nullptr),
+    clearCartButton(nullptr)
 {
     setupUI();
     refreshCart();
@@ -23,23 +34,21 @@ CartWindow::CartWindow(QWidget *parent)
 
 void CartWindow::setupUI()
 {
-    setWindowTitle(QStringLiteral("BookBazzar - Shopping Cart"));
-    resize(1000, 700);
-    setMinimumSize(850, 550);
-    setStyleSheet(QStringLiteral("background-color: #F8F9FD; font-family: 'Segoe UI', Arial, sans-serif;"));
+    setWindowTitle("BookBazzar - Shopping Cart");
+    resize(1180, 780);
+    setMinimumSize(920, 600);
+    setStyleSheet(QString("background-color: %1;").arg(AppStyle::Background));
 
     auto *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
-    // Top Bar
     mainLayout->addWidget(createTopBar());
 
-    // Body content
     auto *bodyWidget = new QWidget(this);
     auto *bodyLayout = new QHBoxLayout(bodyWidget);
-    bodyLayout->setContentsMargins(32, 24, 32, 32);
-    bodyLayout->setSpacing(28);
+    bodyLayout->setContentsMargins(36, 24, 36, 36);
+    bodyLayout->setSpacing(32);
 
     // Left Column: Items List & Empty State
     auto *leftCol = new QWidget(bodyWidget);
@@ -50,10 +59,16 @@ void CartWindow::setupUI()
     scrollArea = new QScrollArea(leftCol);
     scrollArea->setWidgetResizable(true);
     scrollArea->setFrameShape(QFrame::NoFrame);
-    scrollArea->setStyleSheet(QStringLiteral("background: transparent; border: none;"));
+    scrollArea->setStyleSheet(QString(R"(
+        QScrollArea {
+            background-color: %1;
+            border: none;
+        }
+        %2
+    )").arg(AppStyle::Background, AppStyle::scrollBarStyle()));
 
     itemsContainer = new QWidget();
-    itemsContainer->setStyleSheet(QStringLiteral("background: transparent;"));
+    itemsContainer->setStyleSheet(QString("background-color: %1;").arg(AppStyle::Background));
     itemsLayout = new QVBoxLayout(itemsContainer);
     itemsLayout->setContentsMargins(0, 0, 8, 0);
     itemsLayout->setSpacing(14);
@@ -65,32 +80,29 @@ void CartWindow::setupUI()
     // Empty state widget
     emptyStateWidget = new QWidget(leftCol);
     auto *emptyLayout = new QVBoxLayout(emptyStateWidget);
-    emptyLayout->setContentsMargins(40, 60, 40, 60);
+    emptyLayout->setContentsMargins(40, 80, 40, 80);
     emptyLayout->setAlignment(Qt::AlignCenter);
-    emptyLayout->setSpacing(14);
+    emptyLayout->setSpacing(16);
 
-    auto *emptyIcon = new QLabel(QStringLiteral("🛒"), emptyStateWidget);
-    emptyIcon->setStyleSheet(QStringLiteral("font-size: 64px;"));
+    auto *emptyIcon = new QLabel("🛒", emptyStateWidget);
+    emptyIcon->setStyleSheet("font-size: 56px;");
     emptyIcon->setAlignment(Qt::AlignCenter);
     emptyLayout->addWidget(emptyIcon);
 
-    auto *emptyTitle = new QLabel(QStringLiteral("Your Cart is Empty"), emptyStateWidget);
-    emptyTitle->setStyleSheet(QStringLiteral("font-size: 22px; font-weight: 800; color: #1E293B;"));
+    auto *emptyTitle = new QLabel("Your Cart is Empty", emptyStateWidget);
+    emptyTitle->setStyleSheet(QString("font-size: 22px; font-weight: 800; color: %1;").arg(AppStyle::TextPrimary));
     emptyTitle->setAlignment(Qt::AlignCenter);
     emptyLayout->addWidget(emptyTitle);
 
-    auto *emptySub = new QLabel(QStringLiteral("Explore our book exchange & marketplace to find amazing books."), emptyStateWidget);
-    emptySub->setStyleSheet(QStringLiteral("font-size: 14px; color: #64748B;"));
+    auto *emptySub = new QLabel("Explore our textbook & novel catalog to find books from other readers.", emptyStateWidget);
+    emptySub->setStyleSheet(QString("font-size: 13px; color: %1;").arg(AppStyle::TextSecondary));
     emptySub->setAlignment(Qt::AlignCenter);
     emptyLayout->addWidget(emptySub);
 
-    auto *exploreBtn = new QPushButton(QStringLiteral("Browse Books"), emptyStateWidget);
+    auto *exploreBtn = new QPushButton("Browse Books Catalog", emptyStateWidget);
     exploreBtn->setCursor(Qt::PointingHandCursor);
-    exploreBtn->setFixedSize(160, 42);
-    exploreBtn->setStyleSheet(QStringLiteral(
-        "QPushButton { background-color: #4F46E5; color: white; border-radius: 8px; font-weight: 700; font-size: 14px; }"
-        "QPushButton:hover { background-color: #4338CA; }"
-    ));
+    exploreBtn->setMinimumSize(180, 42);
+    exploreBtn->setStyleSheet(AppStyle::primaryButtonStyle());
     connect(exploreBtn, &QPushButton::clicked, this, &CartWindow::browseRequested);
     emptyLayout->addWidget(exploreBtn, 0, Qt::AlignCenter);
 
@@ -98,8 +110,6 @@ void CartWindow::setupUI()
     leftLayout->addWidget(emptyStateWidget);
 
     bodyLayout->addWidget(leftCol, 2);
-
-    // Right Column: Summary Card
     bodyLayout->addWidget(createSummaryCard(), 1);
 
     mainLayout->addWidget(bodyWidget, 1);
@@ -108,34 +118,40 @@ void CartWindow::setupUI()
 QWidget* CartWindow::createTopBar()
 {
     auto *topBar = new QFrame(this);
-    topBar->setFixedHeight(70);
-    topBar->setStyleSheet(QStringLiteral("background-color: white; border-bottom: 1px solid #E2E8F0;"));
+    topBar->setFixedHeight(72);
+    topBar->setStyleSheet(R"(
+        .QFrame {
+            background-color: #FFFFFF;
+            border-bottom: 1px solid #E2E8F0;
+        }
+        QLabel {
+            border: none;
+            background: transparent;
+        }
+    )");
+    AppStyle::applyElevation(topBar, 16, 2, 15);
 
     auto *layout = new QHBoxLayout(topBar);
-    layout->setContentsMargins(32, 12, 32, 12);
+    layout->setContentsMargins(36, 10, 36, 10);
     layout->setSpacing(16);
 
-    auto *backBtn = new QPushButton(QStringLiteral("← Back"), topBar);
+    auto *backBtn = new QPushButton("← Back", topBar);
     backBtn->setCursor(Qt::PointingHandCursor);
-    backBtn->setStyleSheet(QStringLiteral(
-        "QPushButton { background: #F1F5F9; color: #334155; border: 1px solid #E2E8F0; padding: 6px 14px; border-radius: 8px; font-weight: 600; font-size: 13px; }"
-        "QPushButton:hover { background: #E2E8F0; color: #0F172A; }"
-    ));
+    backBtn->setMinimumHeight(38);
+    backBtn->setStyleSheet(AppStyle::secondaryButtonStyle());
     connect(backBtn, &QPushButton::clicked, this, &CartWindow::backRequested);
     layout->addWidget(backBtn);
 
-    auto *title = new QLabel(QStringLiteral("Shopping Cart"), topBar);
-    title->setStyleSheet(QStringLiteral("font-size: 20px; font-weight: 800; color: #0F172A;"));
+    auto *title = new QLabel("My Shopping Cart", topBar);
+    title->setStyleSheet(QString("font-size: 20px; font-weight: 800; color: %1;").arg(AppStyle::TextPrimary));
     layout->addWidget(title);
 
     layout->addStretch();
 
-    auto *refreshBtn = new QPushButton(QStringLiteral("↻ Refresh"), topBar);
+    auto *refreshBtn = new QPushButton("↻ Refresh Cart", topBar);
     refreshBtn->setCursor(Qt::PointingHandCursor);
-    refreshBtn->setStyleSheet(QStringLiteral(
-        "QPushButton { background: transparent; color: #4F46E5; border: 1px solid #C7D2FE; padding: 6px 14px; border-radius: 8px; font-weight: 600; font-size: 13px; }"
-        "QPushButton:hover { background: #EEF2FF; }"
-    ));
+    refreshBtn->setMinimumHeight(38);
+    refreshBtn->setStyleSheet(AppStyle::secondaryButtonStyle());
     connect(refreshBtn, &QPushButton::clicked, this, &CartWindow::refreshCart);
     layout->addWidget(refreshBtn);
 
@@ -145,88 +161,72 @@ QWidget* CartWindow::createTopBar()
 QWidget* CartWindow::createSummaryCard()
 {
     auto *card = new QFrame(this);
-    card->setObjectName(QStringLiteral("summaryCard"));
-    card->setStyleSheet(QStringLiteral(
-        "QFrame#summaryCard { background-color: white; border: 1px solid #E2E8F0; border-radius: 16px; padding: 20px; }"
-    ));
+    card->setStyleSheet(AppStyle::cardStyle());
+    AppStyle::applyElevation(card, 20, 6, 18);
 
     auto *layout = new QVBoxLayout(card);
-    layout->setContentsMargins(20, 20, 20, 20);
-    layout->setSpacing(14);
+    layout->setContentsMargins(24, 24, 24, 24);
+    layout->setSpacing(16);
 
-    auto *heading = new QLabel(QStringLiteral("Order Summary"), card);
-    heading->setStyleSheet(QStringLiteral("font-size: 18px; font-weight: 800; color: #0F172A;"));
+    auto *heading = new QLabel("Order Summary", card);
+    heading->setStyleSheet(QString("font-size: 18px; font-weight: 800; color: %1;").arg(AppStyle::TextPrimary));
     layout->addWidget(heading);
 
-    // Row: Items count & subtotal
     auto *subtotalRow = new QHBoxLayout();
-    itemCountLabel = new QLabel(QStringLiteral("Subtotal (0 items)"), card);
-    itemCountLabel->setStyleSheet(QStringLiteral("font-size: 14px; color: #64748B;"));
-    subtotalLabel = new QLabel(QStringLiteral("₹0.00"), card);
-    subtotalLabel->setStyleSheet(QStringLiteral("font-size: 15px; font-weight: 700; color: #1E293B;"));
+    itemCountLabel = new QLabel("Subtotal (0 items)", card);
+    itemCountLabel->setStyleSheet(QString("font-size: 13px; color: %1;").arg(AppStyle::TextSecondary));
+    subtotalLabel = new QLabel("₹0.00", card);
+    subtotalLabel->setStyleSheet(QString("font-size: 15px; font-weight: 700; color: %1;").arg(AppStyle::TextPrimary));
     subtotalRow->addWidget(itemCountLabel);
     subtotalRow->addStretch();
     subtotalRow->addWidget(subtotalLabel);
     layout->addLayout(subtotalRow);
 
-    // Row: Shipping
     auto *shippingRow = new QHBoxLayout();
-    auto *shippingTitle = new QLabel(QStringLiteral("Shipping"), card);
-    shippingTitle->setStyleSheet(QStringLiteral("font-size: 14px; color: #64748B;"));
-    shippingLabel = new QLabel(QStringLiteral("FREE"), card);
-    shippingLabel->setStyleSheet(QStringLiteral("font-size: 13px; font-weight: 800; color: #059669; background: #D1FAE5; padding: 2px 8px; border-radius: 4px;"));
+    auto *shippingTitle = new QLabel("Estimated Delivery", card);
+    shippingTitle->setStyleSheet(QString("font-size: 13px; color: %1;").arg(AppStyle::TextSecondary));
+    shippingLabel = new QLabel("FREE", card);
+    shippingLabel->setStyleSheet(AppStyle::badgeStyle(AppStyle::SuccessLight, AppStyle::SuccessText, AppStyle::SuccessBorder));
     shippingRow->addWidget(shippingTitle);
     shippingRow->addStretch();
     shippingRow->addWidget(shippingLabel);
     layout->addLayout(shippingRow);
 
-    // Divider
     auto *line = new QFrame(card);
     line->setFrameShape(QFrame::HLine);
-    line->setStyleSheet(QStringLiteral("color: #E2E8F0;"));
+    line->setStyleSheet(QString("color: %1;").arg(AppStyle::BorderSubtle));
     layout->addWidget(line);
 
-    // Row: Total
     auto *totalRow = new QHBoxLayout();
-    auto *totalTitle = new QLabel(QStringLiteral("Total Amount"), card);
-    totalTitle->setStyleSheet(QStringLiteral("font-size: 16px; font-weight: 800; color: #0F172A;"));
-    totalLabel = new QLabel(QStringLiteral("₹0.00"), card);
-    totalLabel->setStyleSheet(QStringLiteral("font-size: 22px; font-weight: 900; color: #4F46E5;"));
+    auto *totalTitle = new QLabel("Total Amount", card);
+    totalTitle->setStyleSheet(QString("font-size: 16px; font-weight: 800; color: %1;").arg(AppStyle::TextPrimary));
+    totalLabel = new QLabel("₹0.00", card);
+    totalLabel->setStyleSheet(QString("font-size: 24px; font-weight: 900; color: %1;").arg(AppStyle::Primary));
     totalRow->addWidget(totalTitle);
     totalRow->addStretch();
     totalRow->addWidget(totalLabel);
     layout->addLayout(totalRow);
 
-    // Warning if unavailable
     unavailableWarningLabel = new QLabel(card);
     unavailableWarningLabel->setWordWrap(true);
-    unavailableWarningLabel->setText(QStringLiteral("⚠️ Some items are no longer available. Please remove them before checkout."));
-    unavailableWarningLabel->setStyleSheet(QStringLiteral("color: #DC2626; font-size: 12px; font-weight: 600; background: #FEE2E2; padding: 8px; border-radius: 6px;"));
+    unavailableWarningLabel->setText("⚠️ Some items in your cart are no longer available. Please remove them before checkout.");
+    unavailableWarningLabel->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: 600; background-color: %2; border: 1px solid %3; padding: 10px; border-radius: 8px;").arg(AppStyle::DangerText, AppStyle::DangerLight, AppStyle::DangerBorder));
     unavailableWarningLabel->setVisible(false);
     layout->addWidget(unavailableWarningLabel);
 
-    layout->addSpacing(10);
+    layout->addSpacing(8);
 
-    // Checkout Button
-    checkoutButton = new QPushButton(QStringLiteral("Proceed to Checkout →"), card);
+    checkoutButton = new QPushButton("Proceed to Checkout →", card);
     checkoutButton->setCursor(Qt::PointingHandCursor);
-    checkoutButton->setFixedHeight(48);
-    checkoutButton->setStyleSheet(QStringLiteral(
-        "QPushButton { background-color: #4F46E5; color: white; border-radius: 10px; font-size: 15px; font-weight: 800; border: none; }"
-        "QPushButton:hover { background-color: #4338CA; }"
-        "QPushButton:disabled { background-color: #CBD5E1; color: #94A3B8; }"
-    ));
+    checkoutButton->setMinimumHeight(46);
+    checkoutButton->setStyleSheet(AppStyle::primaryButtonStyle());
     connect(checkoutButton, &QPushButton::clicked, this, &CartWindow::handleCheckout);
     layout->addWidget(checkoutButton);
 
-    // Clear Cart Button
-    clearCartButton = new QPushButton(QStringLiteral("Clear Cart"), card);
+    clearCartButton = new QPushButton("Clear Cart", card);
     clearCartButton->setCursor(Qt::PointingHandCursor);
-    clearCartButton->setFixedHeight(38);
-    clearCartButton->setStyleSheet(QStringLiteral(
-        "QPushButton { background: transparent; color: #64748B; border: 1px solid #E2E8F0; border-radius: 8px; font-size: 13px; font-weight: 600; }"
-        "QPushButton:hover { background: #FEE2E2; color: #DC2626; border-color: #FCA5A5; }"
-    ));
+    clearCartButton->setMinimumHeight(38);
+    clearCartButton->setStyleSheet(AppStyle::secondaryButtonStyle());
     connect(clearCartButton, &QPushButton::clicked, this, &CartWindow::handleClearCart);
     layout->addWidget(clearCartButton);
 
@@ -246,30 +246,27 @@ QPixmap CartWindow::loadOrGenerateCover(const QString &imagePath, const QString 
         }
     }
 
-    // Procedural gradient cover
     QPixmap pixmap(w, h);
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing);
 
     QLinearGradient grad(0, 0, w, h);
-    grad.setColorAt(0.0, QColor(0x4F, 0x46, 0xE5));
-    grad.setColorAt(1.0, QColor(0x7C, 0x3A, 0xED));
+    grad.setColorAt(0.0, QColor("#4F46E5"));
+    grad.setColorAt(1.0, QColor("#312E81"));
     painter.fillRect(0, 0, w, h, grad);
 
     painter.setPen(Qt::white);
-    QFont f = painter.font();
-    f.setBold(true);
-    f.setPointSize(12);
+    QFont f(AppStyle::appFont(), 10, QFont::Bold);
     painter.setFont(f);
 
-    QRect titleRect(6, 12, w - 12, h / 2);
-    painter.drawText(titleRect, Qt::AlignCenter | Qt::TextWordWrap, title.isEmpty() ? QStringLiteral("Book") : title);
+    QRect titleRect(4, 8, w - 8, h / 2);
+    painter.drawText(titleRect, Qt::AlignCenter | Qt::TextWordWrap, title.isEmpty() ? "Book" : title);
 
     f.setBold(false);
-    f.setPointSize(9);
+    f.setPointSize(8);
     painter.setFont(f);
-    QRect authorRect(6, h / 2 + 4, w - 12, h / 3);
-    painter.drawText(authorRect, Qt::AlignCenter | Qt::TextWordWrap, author.isEmpty() ? QStringLiteral("Unknown") : author);
+    QRect authorRect(4, h / 2 + 4, w - 8, h / 3);
+    painter.drawText(authorRect, Qt::AlignCenter | Qt::TextWordWrap, author.isEmpty() ? "Unknown" : author);
 
     painter.end();
     return pixmap;
@@ -278,54 +275,47 @@ QPixmap CartWindow::loadOrGenerateCover(const QString &imagePath, const QString 
 QFrame* CartWindow::createItemCard(const CartItemModel &item)
 {
     auto *card = new QFrame();
-    card->setObjectName(QStringLiteral("cartItemCard"));
-
-    QString cardStyle = item.isAvailable
-        ? QStringLiteral("QFrame#cartItemCard { background-color: white; border: 1px solid #E2E8F0; border-radius: 12px; }")
-        : QStringLiteral("QFrame#cartItemCard { background-color: #FFF1F2; border: 1px solid #FECDD3; border-radius: 12px; }");
-    card->setStyleSheet(cardStyle);
+    card->setStyleSheet(AppStyle::cardStyle());
+    AppStyle::applyElevation(card, 14, 3, 10);
 
     auto *layout = new QHBoxLayout(card);
-    layout->setContentsMargins(14, 14, 14, 14);
+    layout->setContentsMargins(16, 16, 16, 16);
     layout->setSpacing(16);
 
-    // Book Cover thumbnail
     auto *coverLabel = new QLabel(card);
     coverLabel->setFixedSize(65, 88);
     coverLabel->setPixmap(loadOrGenerateCover(item.coverImage, item.title, item.author, 65, 88));
-    coverLabel->setStyleSheet(QStringLiteral("border-radius: 6px;"));
+    coverLabel->setStyleSheet("border-radius: 6px;");
     layout->addWidget(coverLabel);
 
-    // Center Details
     auto *infoLayout = new QVBoxLayout();
     infoLayout->setSpacing(4);
 
-    auto *titleLabel = new QLabel(item.title.isEmpty() ? QStringLiteral("Untitled Book") : item.title, card);
-    titleLabel->setStyleSheet(QStringLiteral("font-size: 15px; font-weight: 700; color: #0F172A;"));
+    auto *titleLabel = new QLabel(item.title.isEmpty() ? "Untitled Book" : item.title, card);
+    titleLabel->setStyleSheet(QString("font-size: 15px; font-weight: 700; color: %1;").arg(AppStyle::TextPrimary));
     infoLayout->addWidget(titleLabel);
 
-    auto *authorLabel = new QLabel(QStringLiteral("by ") + (item.author.isEmpty() ? QStringLiteral("Unknown Author") : item.author), card);
-    authorLabel->setStyleSheet(QStringLiteral("font-size: 12px; color: #64748B;"));
+    auto *authorLabel = new QLabel("by " + (item.author.isEmpty() ? "Unknown Author" : item.author), card);
+    authorLabel->setStyleSheet(QString("font-size: 12px; color: %1;").arg(AppStyle::TextSecondary));
     infoLayout->addWidget(authorLabel);
 
-    // Tag pills (Condition & Category)
     auto *tagsLayout = new QHBoxLayout();
-    tagsLayout->setSpacing(6);
+    tagsLayout->setSpacing(8);
 
     if (!item.condition.isEmpty()) {
         auto *condLabel = new QLabel(item.condition, card);
-        condLabel->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 600; color: #374151; background: #F3F4F6; padding: 2px 6px; border-radius: 4px;"));
+        condLabel->setStyleSheet(AppStyle::statusBadgeStyle(item.condition));
         tagsLayout->addWidget(condLabel);
     }
     if (!item.category.isEmpty()) {
         auto *catLabel = new QLabel(item.category, card);
-        catLabel->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 600; color: #4338CA; background: #EEF2FF; padding: 2px 6px; border-radius: 4px;"));
+        catLabel->setStyleSheet(AppStyle::badgeStyle(AppStyle::PrimaryLight, AppStyle::Primary, AppStyle::PrimaryBorder));
         tagsLayout->addWidget(catLabel);
     }
 
     if (!item.isAvailable) {
-        auto *staleLabel = new QLabel(QStringLiteral("⚠️ No longer available"), card);
-        staleLabel->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #B91C1C; background: #FEE2E2; padding: 2px 8px; border-radius: 4px;"));
+        auto *staleLabel = new QLabel("⚠️ No longer available", card);
+        staleLabel->setStyleSheet(AppStyle::badgeStyle(AppStyle::DangerLight, AppStyle::DangerText, AppStyle::DangerBorder));
         tagsLayout->addWidget(staleLabel);
     }
 
@@ -334,29 +324,24 @@ QFrame* CartWindow::createItemCard(const CartItemModel &item)
 
     layout->addLayout(infoLayout, 1);
 
-    // Right side: Price & Remove button
     auto *actionLayout = new QVBoxLayout();
     actionLayout->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     actionLayout->setSpacing(8);
 
     auto *priceLabel = new QLabel(QString("₹%1").arg(item.price, 0, 'f', 0), card);
-    priceLabel->setStyleSheet(QStringLiteral("font-size: 18px; font-weight: 800; color: #0F172A;"));
+    priceLabel->setStyleSheet(QString("font-size: 18px; font-weight: 800; color: %1;").arg(AppStyle::TextPrimary));
     priceLabel->setAlignment(Qt::AlignRight);
     actionLayout->addWidget(priceLabel);
 
-    auto *removeBtn = new QPushButton(QStringLiteral("Remove ✕"), card);
+    auto *removeBtn = new QPushButton("Remove ✕", card);
     removeBtn->setCursor(Qt::PointingHandCursor);
-    removeBtn->setStyleSheet(QStringLiteral(
-        "QPushButton { background: transparent; color: #EF4444; border: none; font-size: 12px; font-weight: 600; padding: 4px 6px; }"
-        "QPushButton:hover { color: #B91C1C; text-decoration: underline; }"
-    ));
+    removeBtn->setStyleSheet(QString("QPushButton { background: transparent; color: %1; border: none; font-size: 12px; font-weight: 600; padding: 4px 6px; } QPushButton:hover { color: %2; }").arg(AppStyle::Danger, AppStyle::DangerHover));
     connect(removeBtn, &QPushButton::clicked, this, [this, bId = item.bookId]() {
         handleRemoveItem(bId);
     });
     actionLayout->addWidget(removeBtn);
 
     layout->addLayout(actionLayout);
-
     return card;
 }
 
@@ -373,7 +358,6 @@ void CartWindow::refreshCart()
 
         cart = CartModel::fromJson(json[QStringLiteral("cart")].toObject());
 
-        // Clear existing items in itemsLayout
         QLayoutItem *child;
         while ((child = itemsLayout->takeAt(0)) != nullptr) {
             if (child->widget()) {
@@ -387,7 +371,6 @@ void CartWindow::refreshCart()
         }
         itemsLayout->addStretch();
 
-        // Update Summary
         itemCountLabel->setText(QString("Subtotal (%1 item%2)").arg(cart.items.size()).arg(cart.items.size() == 1 ? "" : "s"));
         subtotalLabel->setText(QString("₹%1").arg(cart.subtotal, 0, 'f', 2));
         totalLabel->setText(QString("₹%1").arg(cart.total, 0, 'f', 2));
@@ -418,17 +401,19 @@ void CartWindow::handleRemoveItem(const QString &bookId)
         if (ok) {
             refreshCart();
         } else {
-            QMessageBox::warning(this, QStringLiteral("Error"), errorMsg.isEmpty() ? QStringLiteral("Failed to remove item.") : errorMsg);
+            StyledMessageBox::warning(this, "Error", errorMsg.isEmpty() ? "Failed to remove item." : errorMsg);
         }
     });
 }
 
 void CartWindow::handleClearCart()
 {
-    auto res = QMessageBox::question(this, QStringLiteral("Clear Cart"),
-                                     QStringLiteral("Are you sure you want to remove all items from your cart?"),
-                                     QMessageBox::Yes | QMessageBox::No);
-    if (res != QMessageBox::Yes) {
+    bool confirmed = StyledMessageBox::question(
+        this, "Clear Cart",
+        "Are you sure you want to remove all items from your cart?",
+        "Yes, Clear", "Keep Items"
+    );
+    if (!confirmed) {
         return;
     }
 
@@ -440,7 +425,7 @@ void CartWindow::handleClearCart()
         if (ok) {
             refreshCart();
         } else {
-            QMessageBox::warning(this, QStringLiteral("Error"), errorMsg.isEmpty() ? QStringLiteral("Failed to clear cart.") : errorMsg);
+            StyledMessageBox::warning(this, "Error", errorMsg.isEmpty() ? "Failed to clear cart." : errorMsg);
         }
     });
 }
@@ -448,12 +433,12 @@ void CartWindow::handleClearCart()
 void CartWindow::handleCheckout()
 {
     if (cart.items.isEmpty()) {
-        QMessageBox::information(this, QStringLiteral("Empty Cart"), QStringLiteral("Your cart is empty."));
+        StyledMessageBox::information(this, "Empty Cart", "Your cart is empty.");
         return;
     }
 
     if (cart.hasUnavailableItems) {
-        QMessageBox::warning(this, QStringLiteral("Unavailable Items"), QStringLiteral("Please remove unavailable items before proceeding to checkout."));
+        StyledMessageBox::warning(this, "Unavailable Items", "Please remove unavailable items before proceeding to checkout.");
         return;
     }
 

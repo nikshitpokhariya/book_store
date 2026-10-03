@@ -15,8 +15,12 @@ public:
   ADD_METHOD_TO(ReviewController::getBookReviews, "/api/books/{1}/reviews",
                 drogon::Get);
 
+  ADD_METHOD_TO(ReviewController::getSellerReviews, "/api/reviews/seller/{1}",
+                drogon::Get);
+
   ADD_METHOD_TO(ReviewController::updateReview, "/api/reviews/{1}",
                 drogon::Put, "AuthFilter");
+
 
   ADD_METHOD_TO(ReviewController::deleteReview, "/api/reviews/{1}",
                 drogon::Delete, "AuthFilter");
@@ -31,6 +35,12 @@ public:
       const drogon::HttpRequestPtr &req,
       std::function<void(const drogon::HttpResponsePtr &)> &&callback,
       std::string bookId);
+
+  void getSellerReviews(
+      const drogon::HttpRequestPtr &req,
+      std::function<void(const drogon::HttpResponsePtr &)> &&callback,
+      std::string sellerId);
+
 
   void getMyReviews(
       const drogon::HttpRequestPtr &req,

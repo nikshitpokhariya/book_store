@@ -51,6 +51,12 @@ Json::Value bookJson(const Book &book) {
   result["price"] = book.price;
   result["condition"] = book.condition;
   result["coverImage"] = book.coverImage;
+  Json::Value imagesJson(Json::arrayValue);
+  for (const auto &img : book.images) {
+    imagesJson.append(img);
+  }
+  result["images"] = imagesJson;
+  result["videoUrl"] = book.videoUrl;
   result["status"] = book.status;
   result["averageRating"] = book.averageRating;
   result["reviewCount"] = book.reviewCount;
@@ -161,6 +167,16 @@ void BookController::createListing(
   }
   if (json->isMember("coverImage") && (*json)["coverImage"].isString()) {
     book.coverImage = (*json)["coverImage"].asString();
+  }
+  if (json->isMember("images") && (*json)["images"].isArray()) {
+    for (const auto &imgVal : (*json)["images"]) {
+      if (imgVal.isString()) {
+        book.images.push_back(imgVal.asString());
+      }
+    }
+  }
+  if (json->isMember("videoUrl") && (*json)["videoUrl"].isString()) {
+    book.videoUrl = (*json)["videoUrl"].asString();
   }
 
   try {
@@ -414,6 +430,18 @@ void BookController::updateListing(
     }
     update.coverImage = (*json)["coverImage"].asString();
   }
+  if (json->isMember("images") && (*json)["images"].isArray()) {
+    std::vector<std::string> imgs;
+    for (const auto &imgVal : (*json)["images"]) {
+      if (imgVal.isString()) {
+        imgs.push_back(imgVal.asString());
+      }
+    }
+    update.images = imgs;
+  }
+  if (json->isMember("videoUrl") && (*json)["videoUrl"].isString()) {
+    update.videoUrl = (*json)["videoUrl"].asString();
+  }
 
   try {
     BookRepository books;
@@ -506,6 +534,37 @@ void BookController::deleteListing(
     callback(jsonError(k500InternalServerError, "Internal server error"));
   } catch (const std::exception &e) {
     LOG_ERROR << "Delete listing failed: " << e.what();
+    callback(jsonError(k500InternalServerError, "Internal server error"));
+  }
+}
+
+void BookController::suggestions(
+    const HttpRequestPtr &req,
+    std::function<void(const HttpResponsePtr &)> &&callback) {
+  const auto q = req->getParameter("q");
+  int limit = parseIntParam(req->getParameter("limit"), 5);
+  limit = std::clamp(limit, 1, 10);
+
+  try {
+    BookRepository books;
+    UserRepository users;
+    BookService service(books, users);
+
+    auto list = service.getSuggestions(q, limit);
+
+    Json::Value body;
+    body["success"] = true;
+    Json::Value items(Json::arrayValue);
+    for (const auto &s : list) {
+      items.append(s);
+    }
+    body["suggestions"] = items;
+
+    auto response = HttpResponse::newHttpJsonResponse(body);
+    response->setStatusCode(k200OK);
+    callback(response);
+  } catch (const std::exception &e) {
+    LOG_ERROR << "Suggestions failed: " << e.what();
     callback(jsonError(k500InternalServerError, "Internal server error"));
   }
 }

@@ -5,6 +5,7 @@
 #include "browsewindow.h"
 #include "bookdetailswindow.h"
 #include "sellwindow.h"
+#include "sellbookwindow.h"
 #include "listingswindow.h"
 #include "orderswindow.h"
 #include "windows/CartWindow.h"
@@ -13,21 +14,17 @@
 #include "windows/ExchangeWindow.h"
 #include "network/ApiClient.h"
 #include "auth/SessionManager.h"
+#include "AppStyle.h"
+#include "StyledMessageBox.h"
+
 #include <QJsonObject>
 #include <QNetworkReply>
-
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QLabel>
 #include <QFrame>
-#include <QMessageBox>
-
-
-// =========================================================
-// CONSTRUCTOR
-// =========================================================
 
 LoginWindow::LoginWindow(QWidget *parent)
     : QWidget(parent),
@@ -43,543 +40,176 @@ LoginWindow::LoginWindow(QWidget *parent)
     accountLabel(nullptr)
 {
     setWindowTitle("BookBazzar - Login");
+    resize(980, 620);
+    setMinimumSize(850, 520);
+    setStyleSheet(QString("background-color: %1;").arg(AppStyle::Background));
 
-    resize(950, 600);
-
-    setMinimumSize(800, 500);
-
-
-    // =====================================================
-    // MAIN LAYOUT
-    // =====================================================
-
-    QHBoxLayout *mainLayout =
-        new QHBoxLayout(this);
-
-    mainLayout->setContentsMargins(
-        30, 30, 30, 30
-        );
-
+    QHBoxLayout *mainLayout = new QHBoxLayout(this);
+    mainLayout->setContentsMargins(32, 32, 32, 32);
     mainLayout->setSpacing(0);
 
-
-    // =====================================================
-    // LEFT PANEL
-    // =====================================================
-
-    QFrame *leftPanel =
-        new QFrame(this);
-
-    leftPanel->setObjectName(
-        "leftPanel"
-        );
-
-    QVBoxLayout *leftLayout =
-        new QVBoxLayout(leftPanel);
-
-    leftLayout->setContentsMargins(
-        45, 45, 45, 45
-        );
-
-    leftLayout->setSpacing(15);
-
-
-    // =====================================================
-    // LOGO
-    // =====================================================
-
-    logoLabel =
-        new QLabel("BookBazzar");
-
-    logoLabel->setObjectName(
-        "logoLabel"
-        );
-
-    logoLabel->setAlignment(
-        Qt::AlignCenter
-        );
-
-
-    // =====================================================
-    // TAGLINE
-    // =====================================================
-
-    taglineLabel =
-        new QLabel(
-            "Buy • Sell • Discover Books"
-            );
-
-    taglineLabel->setObjectName(
-        "taglineLabel"
-        );
-
-    taglineLabel->setAlignment(
-        Qt::AlignCenter
-        );
-
-
-    // =====================================================
-    // DESCRIPTION
-    // =====================================================
-
-    descriptionLabel =
-        new QLabel(
-            "Give your books a second chapter.\n\n"
-            "Find affordable books from other readers "
-            "or sell the books you no longer need."
-            );
-
-    descriptionLabel->setObjectName(
-        "descriptionLabel"
-        );
-
-    descriptionLabel->setAlignment(
-        Qt::AlignCenter
-        );
-
-    descriptionLabel->setWordWrap(
-        true
-        );
-
-
-    leftLayout->addStretch();
-
-    leftLayout->addWidget(
-        logoLabel
-        );
-
-    leftLayout->addWidget(
-        taglineLabel
-        );
-
-    leftLayout->addSpacing(25);
-
-    leftLayout->addWidget(
-        descriptionLabel
-        );
-
-    leftLayout->addStretch();
-
-
-    // =====================================================
-    // RIGHT PANEL
-    // =====================================================
-
-    QFrame *rightPanel =
-        new QFrame(this);
-
-    rightPanel->setObjectName(
-        "rightPanel"
-        );
-
-    QVBoxLayout *rightLayout =
-        new QVBoxLayout(rightPanel);
-
-    rightLayout->setContentsMargins(
-        55, 45, 55, 45
-        );
-
-    rightLayout->setSpacing(12);
-
-
-    // =====================================================
-    // WELCOME
-    // =====================================================
-
-    welcomeLabel =
-        new QLabel("Welcome Back!");
-
-    welcomeLabel->setObjectName(
-        "welcomeLabel"
-        );
-
-    welcomeLabel->setAlignment(
-        Qt::AlignCenter
-        );
-
-
-    // =====================================================
-    // SUBTITLE
-    // =====================================================
-
-    loginSubtitleLabel =
-        new QLabel(
-            "Login to continue to BookBazzar"
-            );
-
-    loginSubtitleLabel->setObjectName(
-        "loginSubtitleLabel"
-        );
-
-    loginSubtitleLabel->setAlignment(
-        Qt::AlignCenter
-        );
-
-
-    // =====================================================
-    // EMAIL
-    // =====================================================
-
-    emailEdit =
-        new QLineEdit();
-
-    emailEdit->setObjectName(
-        "emailEdit"
-        );
-
-    emailEdit->setPlaceholderText(
-        "Enter your email"
-        );
-
-    emailEdit->setMinimumHeight(
-        45
-        );
-
-
-    // =====================================================
-    // PASSWORD
-    // =====================================================
-
-    passwordEdit =
-        new QLineEdit();
-
-    passwordEdit->setObjectName(
-        "passwordEdit"
-        );
-
-    passwordEdit->setPlaceholderText(
-        "Enter your password"
-        );
-
-    passwordEdit->setEchoMode(
-        QLineEdit::Password
-        );
-
-    passwordEdit->setMinimumHeight(
-        45
-        );
-
-
-    // =====================================================
-    // LOGIN BUTTON
-    // =====================================================
-
-    loginButton =
-        new QPushButton("Login");
-
-    loginButton->setObjectName(
-        "loginButton"
-        );
-
-    loginButton->setMinimumHeight(
-        48
-        );
-
-
-    // =====================================================
-    // ACCOUNT LABEL
-    // =====================================================
-
-    accountLabel =
-        new QLabel(
-            "Don't have an account?"
-            );
-
-    accountLabel->setObjectName(
-        "accountLabel"
-        );
-
-    accountLabel->setAlignment(
-        Qt::AlignCenter
-        );
-
-
-    // =====================================================
-    // SIGNUP BUTTON
-    // =====================================================
-
-    signupButton =
-        new QPushButton(
-            "Create New Account"
-            );
-
-    signupButton->setObjectName(
-        "signupButton"
-        );
-
-    signupButton->setMinimumHeight(
-        40
-        );
-
-
-    // =====================================================
-    // ADD WIDGETS
-    // =====================================================
-
-    rightLayout->addStretch();
-
-    rightLayout->addWidget(
-        welcomeLabel
-        );
-
-    rightLayout->addWidget(
-        loginSubtitleLabel
-        );
-
-    rightLayout->addSpacing(20);
-
-    rightLayout->addWidget(
-        emailEdit
-        );
-
-    rightLayout->addWidget(
-        passwordEdit
-        );
-
-    rightLayout->addSpacing(8);
-
-    rightLayout->addWidget(
-        loginButton
-        );
-
-    rightLayout->addSpacing(15);
-
-    rightLayout->addWidget(
-        accountLabel
-        );
-
-    rightLayout->addWidget(
-        signupButton
-        );
-
-    rightLayout->addStretch();
-
-
-    // =====================================================
-    // ADD PANELS
-    // =====================================================
-
-    mainLayout->addWidget(
-        leftPanel,
-        1
-        );
-
-    mainLayout->addWidget(
-        rightPanel,
-        1
-        );
-
-
-    // =====================================================
-    // STYLING
-    // =====================================================
-
-    setStyleSheet(R"(
-
-        QWidget {
-            font-family: "Segoe UI";
+    // Left Panel (Brand / Value presentation)
+    QFrame *leftPanel = new QFrame(this);
+    leftPanel->setObjectName("leftPanel");
+    leftPanel->setStyleSheet(R"(
+        QFrame#leftPanel {
+            background-color: #0F172A;
+            border-top-left-radius: 16px;
+            border-bottom-left-radius: 16px;
         }
-
-        #leftPanel {
-            background-color: #1E293B;
-            border-top-left-radius: 20px;
-            border-bottom-left-radius: 20px;
-        }
-
-        #rightPanel {
-            background-color: white;
-            border-top-right-radius: 20px;
-            border-bottom-right-radius: 20px;
-        }
-
-        #logoLabel {
-            color: white;
-            font-size: 36px;
-            font-weight: bold;
-        }
-
-        #taglineLabel {
-            color: #CBD5E1;
-            font-size: 18px;
-        }
-
-        #descriptionLabel {
-            color: #CBD5E1;
-            font-size: 15px;
-        }
-
-        #welcomeLabel {
-            color: #0F172A;
-            font-size: 30px;
-            font-weight: bold;
-        }
-
-        #loginSubtitleLabel {
-            color: #64748B;
-            font-size: 15px;
-        }
-
-        #emailEdit,
-        #passwordEdit {
-
-            background-color: #F8FAFC;
-            color: #0F172A;
-
-            border: 1px solid #CBD5E1;
-            border-radius: 10px;
-
-            padding-left: 14px;
-            padding-right: 14px;
-
-            font-size: 15px;
-        }
-
-        #emailEdit:focus,
-        #passwordEdit:focus {
-
-            border: 2px solid #2563EB;
-            background-color: white;
-        }
-
-        #loginButton {
-
-            background-color: #2563EB;
-            color: white;
-
+        QLabel {
+            background: transparent;
             border: none;
-            border-radius: 10px;
-
-            font-size: 16px;
-            font-weight: bold;
         }
-
-        #loginButton:hover {
-            background-color: #1D4ED8;
-        }
-
-        #loginButton:pressed {
-            background-color: #1E40AF;
-        }
-
-        #signupButton {
-
-            background-color: transparent;
-            color: #2563EB;
-
-            border: none;
-
-            font-size: 15px;
-            font-weight: bold;
-        }
-
-        #signupButton:hover {
-            color: #1D4ED8;
-        }
-
-        #accountLabel {
-            color: #64748B;
-            font-size: 14px;
-        }
-
     )");
 
+    QVBoxLayout *leftLayout = new QVBoxLayout(leftPanel);
+    leftLayout->setContentsMargins(48, 48, 48, 48);
+    leftLayout->setSpacing(16);
 
-    // =====================================================
-    // CONNECTIONS
-    // =====================================================
+    QLabel *badge = new QLabel("COMMUNITY MARKETPLACE");
+    badge->setStyleSheet("background: transparent; border: none; color: #818CF8; font-size: 11px; font-weight: 800; letter-spacing: 1px;");
 
-    connect(
-        loginButton,
-        &QPushButton::clicked,
-        this,
-        &LoginWindow::handleLogin
-        );
+    logoLabel = new QLabel("BookBazzar");
+    logoLabel->setStyleSheet("background: transparent; border: none; color: #FFFFFF; font-size: 32px; font-weight: 800;");
 
+    taglineLabel = new QLabel("Buy, sell, and exchange books with readers everywhere.");
+    taglineLabel->setStyleSheet("background: transparent; border: none; color: #94A3B8; font-size: 15px; line-height: 1.4;");
+    taglineLabel->setWordWrap(true);
 
-    connect(
-        signupButton,
-        &QPushButton::clicked,
-        this,
-        &LoginWindow::openSignup
-        );
+    QLabel *bullet1 = new QLabel("✓  Direct peer-to-peer textbook & novel exchange");
+    bullet1->setStyleSheet("background: transparent; border: none; color: #CBD5E1; font-size: 13px; font-weight: 600;");
+    QLabel *bullet2 = new QLabel("✓  Instant order tracking and delivery status");
+    bullet2->setStyleSheet("background: transparent; border: none; color: #CBD5E1; font-size: 13px; font-weight: 600;");
+    QLabel *bullet3 = new QLabel("✓  Verified reader community & authentic reviews");
+    bullet3->setStyleSheet("background: transparent; border: none; color: #CBD5E1; font-size: 13px; font-weight: 600;");
 
+    leftLayout->addStretch();
+    leftLayout->addWidget(badge);
+    leftLayout->addWidget(logoLabel);
+    leftLayout->addWidget(taglineLabel);
+    leftLayout->addSpacing(28);
+    leftLayout->addWidget(bullet1);
+    leftLayout->addWidget(bullet2);
+    leftLayout->addWidget(bullet3);
+    leftLayout->addStretch();
 
-    connect(
-        passwordEdit,
-        &QLineEdit::returnPressed,
-        this,
-        &LoginWindow::handleLogin
-        );
-
-
-    connect(
-        emailEdit,
-        &QLineEdit::returnPressed,
-        this,
-        [this]()
-        {
-            passwordEdit->setFocus();
+    // Right Panel (Form)
+    QFrame *rightPanel = new QFrame(this);
+    rightPanel->setObjectName("rightPanel");
+    rightPanel->setStyleSheet(R"(
+        QFrame#rightPanel {
+            background-color: #FFFFFF;
+            border-top-right-radius: 16px;
+            border-bottom-right-radius: 16px;
+            border: 1px solid #E2E8F0;
+            border-left: none;
         }
-        );
+        QLabel {
+            background: transparent;
+            border: none;
+        }
+    )");
 
+    QVBoxLayout *rightLayout = new QVBoxLayout(rightPanel);
+    rightLayout->setContentsMargins(56, 48, 56, 48);
+    rightLayout->setSpacing(12);
+
+    welcomeLabel = new QLabel("Welcome Back");
+    welcomeLabel->setStyleSheet("color: #0F172A; font-size: 26px; font-weight: 800;");
+
+    loginSubtitleLabel = new QLabel("Enter your email and password to access your account");
+    loginSubtitleLabel->setStyleSheet("color: #64748B; font-size: 13px;");
+
+    QLabel *emailTag = new QLabel("Email Address");
+    emailTag->setStyleSheet("color: #334155; font-size: 13px; font-weight: 600;");
+
+    emailEdit = new QLineEdit();
+    emailEdit->setObjectName("emailEdit");
+    emailEdit->setPlaceholderText("name@example.com");
+    emailEdit->setStyleSheet(AppStyle::inputStyle());
+    emailEdit->setMinimumHeight(44);
+
+    QLabel *passwordTag = new QLabel("Password");
+    passwordTag->setStyleSheet("color: #334155; font-size: 13px; font-weight: 600;");
+
+    passwordEdit = new QLineEdit();
+    passwordEdit->setObjectName("passwordEdit");
+    passwordEdit->setPlaceholderText("••••••••");
+    passwordEdit->setEchoMode(QLineEdit::Password);
+    passwordEdit->setStyleSheet(AppStyle::inputStyle());
+    passwordEdit->setMinimumHeight(44);
+
+    loginButton = new QPushButton("Sign In");
+    loginButton->setObjectName("loginButton");
+    loginButton->setStyleSheet(AppStyle::primaryButtonStyle());
+    loginButton->setMinimumHeight(46);
+    loginButton->setCursor(Qt::PointingHandCursor);
+
+    QHBoxLayout *signupPrompt = new QHBoxLayout();
+    accountLabel = new QLabel("Don't have an account?");
+    accountLabel->setStyleSheet("color: #64748B; font-size: 13px;");
+
+    signupButton = new QPushButton("Create Account");
+    signupButton->setStyleSheet(AppStyle::ghostButtonStyle());
+    signupButton->setCursor(Qt::PointingHandCursor);
+
+    signupPrompt->addStretch();
+    signupPrompt->addWidget(accountLabel);
+    signupPrompt->addWidget(signupButton);
+    signupPrompt->addStretch();
+
+    rightLayout->addStretch();
+    rightLayout->addWidget(welcomeLabel);
+    rightLayout->addWidget(loginSubtitleLabel);
+    rightLayout->addSpacing(16);
+    rightLayout->addWidget(emailTag);
+    rightLayout->addWidget(emailEdit);
+    rightLayout->addSpacing(4);
+    rightLayout->addWidget(passwordTag);
+    rightLayout->addWidget(passwordEdit);
+    rightLayout->addSpacing(12);
+    rightLayout->addWidget(loginButton);
+    rightLayout->addSpacing(8);
+    rightLayout->addLayout(signupPrompt);
+    rightLayout->addStretch();
+
+    mainLayout->addWidget(leftPanel, 1);
+    mainLayout->addWidget(rightPanel, 1);
+
+    AppStyle::applyElevation(leftPanel, 30, 8, 30);
+    AppStyle::applyElevation(rightPanel, 30, 8, 30);
+
+    connect(loginButton, &QPushButton::clicked, this, &LoginWindow::handleLogin);
+    connect(signupButton, &QPushButton::clicked, this, &LoginWindow::openSignup);
+    connect(passwordEdit, &QLineEdit::returnPressed, this, &LoginWindow::handleLogin);
+    connect(emailEdit, &QLineEdit::returnPressed, this, [this]() {
+        passwordEdit->setFocus();
+    });
 
     emailEdit->setFocus();
 }
-
-
-// =========================================================
-// DESTRUCTOR
-// =========================================================
 
 LoginWindow::~LoginWindow()
 {
 }
 
-
-// =========================================================
-// LOGIN
-// =========================================================
-
 void LoginWindow::handleLogin()
 {
-    QString email =
-        emailEdit->text().trimmed();
+    QString email = emailEdit->text().trimmed();
+    QString password = passwordEdit->text();
 
-    QString password =
-        passwordEdit->text();
-
-
-    // =====================================================
-    // VALIDATION
-    // =====================================================
-
-    if (email.isEmpty())
-    {
-        QMessageBox::warning(
-            this,
-            "Login",
-            "Please enter your email."
-            );
-
+    if (email.isEmpty()) {
+        StyledMessageBox::warning(this, "Login", "Please enter your email.");
         emailEdit->setFocus();
-
         return;
     }
 
-
-    if (password.isEmpty())
-    {
-        QMessageBox::warning(
-            this,
-            "Login",
-            "Please enter your password."
-            );
-
+    if (password.isEmpty()) {
+        StyledMessageBox::warning(this, "Login", "Please enter your password.");
         passwordEdit->setFocus();
-
         return;
     }
-
 
     loginButton->setEnabled(false);
     loginButton->setText("Signing In...");
@@ -589,16 +219,14 @@ void LoginWindow::handleLogin()
     body[QStringLiteral("password")] = password;
 
     auto *reply = ApiClient::instance().post(QStringLiteral("/api/auth/login"), body, false);
-    connect(reply, &QNetworkReply::finished, this, [this, reply]()
-    {
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
         reply->deleteLater();
 
         loginButton->setEnabled(true);
         loginButton->setText("Sign In");
 
-        if (ok)
-        {
+        if (ok) {
             const QString token = json[QStringLiteral("accessToken")].toString();
             const qint64 expiresIn = json.value(QStringLiteral("expiresIn")).toInteger(900);
             const QJsonObject userObj = json[QStringLiteral("user")].toObject();
@@ -607,376 +235,59 @@ void LoginWindow::handleLogin()
 
             SessionManager::instance().setSession(token, expiresIn, userId, userName);
 
-            // =================================================
-            // CREATE HOME WINDOW
-            // =================================================
+            HomeWindow *homeWindow = new HomeWindow(userName);
+            homeWindow->setAttribute(Qt::WA_DeleteOnClose);
 
-            HomeWindow *homeWindow =
-                new HomeWindow(
-                    userName
-                    );
-
-            homeWindow->setAttribute(
-                Qt::WA_DeleteOnClose
-                );
-
-
-            // =================================================
             // LOGOUT
-            // =================================================
-
-            connect(
-                homeWindow,
-                &HomeWindow::logoutRequested,
-                this,
-                [this, homeWindow]()
-                {
-                    homeWindow->close();
-
-                    this->show();
-
-                    this->raise();
-
-                    this->activateWindow();
-
-                    emailEdit->clear();
-
-                    passwordEdit->clear();
-
-                    emailEdit->setFocus();
-                }
-                );
-
-
-            // =================================================
-            // BROWSE BOOKS
-            // =================================================
-
-            connect(
-                homeWindow,
-                &HomeWindow::browseBooksRequested,
-                this,
-                [homeWindow]()
-                {
-                    BrowseWindow *browseWindow =
-                        new BrowseWindow(
-                            homeWindow->windowTitle()
-                            );
-
-                    browseWindow->setAttribute(
-                        Qt::WA_DeleteOnClose
-                        );
-
-
-                    connect(
-                        browseWindow,
-                        &BrowseWindow::backRequested,
-                        browseWindow,
-                        [browseWindow]()
-                        {
-                            browseWindow->close();
-                        }
-                        );
-
-                    connect(
-                        browseWindow,
-                        &BrowseWindow::bookSelected,
-                        browseWindow,
-                        [homeWindow](const QString &bookId)
-                        {
-                            BookDetailsWindow *details =
-                                new BookDetailsWindow(
-                                    bookId,
-                                    homeWindow->windowTitle()
-                                    );
-
-                            details->setAttribute(
-                                Qt::WA_DeleteOnClose
-                                );
-
-                            connect(
-                                details,
-                                &BookDetailsWindow::backRequested,
-                                details,
-                                &QWidget::close
-                                );
-
-                            details->show();
-                            details->raise();
-                            details->activateWindow();
-                        }
-                        );
-
-                    browseWindow->show();
-
-                    browseWindow->raise();
-
-                    browseWindow->activateWindow();
-                }
-                );
-
-
-            // =================================================
-            // SELL BOOK
-            // =================================================
-
-            connect(
-                homeWindow,
-                &HomeWindow::sellBookRequested,
-                this,
-                [homeWindow, userName]()
-                {
-                    SellWindow *sellWindow =
-                        new SellWindow(
-                            userName,
-                            homeWindow
-                            );
-
-
-                    sellWindow->setAttribute(
-                        Qt::WA_DeleteOnClose
-                        );
-
-
-                    // -----------------------------------------
-                    // BACK BUTTON
-                    // -----------------------------------------
-
-                    connect(
-                        sellWindow,
-                        &SellWindow::backRequested,
-                        sellWindow,
-                        [sellWindow]()
-                        {
-                            sellWindow->close();
-                        }
-                        );
-
-
-                    // -----------------------------------------
-                    // BOOK ADDED
-                    // -----------------------------------------
-
-                    connect(
-                        sellWindow,
-                        &SellWindow::bookAdded,
-                        homeWindow,
-                        [homeWindow]()
-                        {
-                            homeWindow->refreshRecentBooks();
-                        }
-                        );
-
-
-                    // -----------------------------------------
-                    // SHOW SELL WINDOW
-                    // -----------------------------------------
-
-                    sellWindow->show();
-
-                    sellWindow->raise();
-
-                    sellWindow->activateWindow();
-                }
-                );
-
-
-            // =================================================
-            // MY LISTINGS
-            // =================================================
-            connect(
-                homeWindow,
-                &HomeWindow::listingsRequested,
-                this,
-                [homeWindow, userName]()
-                {
-                    ListingsWindow *listings = new ListingsWindow(userName, homeWindow);
-                    listings->setAttribute(Qt::WA_DeleteOnClose);
-                    connect(listings, &ListingsWindow::backRequested, listings, &QWidget::close);
-                    connect(listings, &ListingsWindow::addNewListingRequested, homeWindow, &HomeWindow::handleSellBook);
-                    listings->show();
-                    listings->raise();
-                    listings->activateWindow();
-                }
-                );
-
-
-            // =================================================
-            // MY ORDERS
-            // =================================================
-            connect(
-                homeWindow,
-                &HomeWindow::ordersRequested,
-                this,
-                [homeWindow, userName]()
-                {
-                    OrdersWindow *orders = new OrdersWindow(userName, homeWindow);
-                    orders->setAttribute(Qt::WA_DeleteOnClose);
-                    connect(orders, &OrdersWindow::backRequested, orders, &QWidget::close);
-                    connect(orders, &OrdersWindow::browseRequested, homeWindow, &HomeWindow::handleBrowseBooks);
-                    orders->show();
-                    orders->raise();
-                    orders->activateWindow();
-                }
-                );
-
-
-            // =================================================
-            // SHOPPING CART
-            // =================================================
-            connect(
-                homeWindow,
-                &HomeWindow::cartRequested,
-                this,
-                [homeWindow]()
-                {
-                    CartWindow *cartWin = new CartWindow(homeWindow);
-                    cartWin->setAttribute(Qt::WA_DeleteOnClose);
-                    connect(cartWin, &CartWindow::backRequested, cartWin, &QWidget::close);
-                    connect(cartWin, &CartWindow::browseRequested, [cartWin, homeWindow]() {
-                        cartWin->close();
-                        homeWindow->handleBrowseBooks();
-                    });
-                    connect(cartWin, &CartWindow::cartCountChanged, homeWindow, &HomeWindow::updateCartBadge);
-                    connect(cartWin, &CartWindow::checkoutRequested, [cartWin, homeWindow]() {
-                        CheckoutWindow *checkout = new CheckoutWindow(homeWindow);
-                        checkout->setAttribute(Qt::WA_DeleteOnClose);
-                        connect(checkout, &CheckoutWindow::backRequested, [checkout, cartWin]() {
-                            checkout->close();
-                            cartWin->show();
-                            cartWin->raise();
-                            cartWin->activateWindow();
-                        });
-                        connect(checkout, &CheckoutWindow::orderPlaced, [checkout, cartWin, homeWindow](const QString &orderId) {
-                            checkout->close();
-                            cartWin->close();
-                            homeWindow->refreshCartCount();
-
-                            OrderDetailWindow *detail = new OrderDetailWindow(orderId, homeWindow);
-                            detail->setAttribute(Qt::WA_DeleteOnClose);
-                            connect(detail, &OrderDetailWindow::backRequested, detail, &QWidget::close);
-                            detail->show();
-                            detail->raise();
-                            detail->activateWindow();
-                        });
-                        cartWin->hide();
-                        checkout->show();
-                        checkout->raise();
-                        checkout->activateWindow();
-                    });
-
-                    cartWin->show();
-                    cartWin->raise();
-                    cartWin->activateWindow();
-                }
-                );
-
-
-            // =================================================
-            // EXCHANGES
-            // =================================================
-            connect(
-                homeWindow,
-                &HomeWindow::exchangesRequested,
-                this,
-                [homeWindow]()
-                {
-                    ExchangeWindow *exWin = new ExchangeWindow(homeWindow);
-                    exWin->setAttribute(Qt::WA_DeleteOnClose);
-                    connect(exWin, &ExchangeWindow::backRequested, exWin, &QWidget::close);
-                    exWin->show();
-                    exWin->raise();
-                    exWin->activateWindow();
-                }
-                );
-
-
-            // =================================================
-            // SHOW HOME WINDOW
-            // =================================================
+            connect(homeWindow, &HomeWindow::logoutRequested, this, [this, homeWindow]() {
+                homeWindow->close();
+                this->show();
+                this->raise();
+                this->activateWindow();
+                emailEdit->clear();
+                passwordEdit->clear();
+                emailEdit->setFocus();
+            });
 
             homeWindow->show();
-
             homeWindow->raise();
-
             homeWindow->activateWindow();
-
-
-            // =================================================
-            // HIDE LOGIN WINDOW
-            // =================================================
-
             this->hide();
-        }
-        else
-        {
-            QMessageBox::warning(
+        } else {
+            StyledMessageBox::warning(
                 this,
                 "Login Failed",
                 errorMsg.isEmpty() ? "Incorrect email or password." : errorMsg
-                );
-
+            );
             passwordEdit->clear();
             passwordEdit->setFocus();
         }
     });
 }
 
-
-// =========================================================
-// SIGNUP
-// =========================================================
-
 void LoginWindow::openSignup()
 {
-    SignupWindow *signupWindow =
-        new SignupWindow();
-
-
-    signupWindow->setAttribute(
-        Qt::WA_DeleteOnClose
-        );
-
-
-    // =====================================================
-    // HIDE LOGIN
-    // =====================================================
+    SignupWindow *signupWindow = new SignupWindow();
+    signupWindow->setAttribute(Qt::WA_DeleteOnClose);
 
     this->hide();
 
+    connect(signupWindow, &SignupWindow::signupSuccessful, this, [this]() {
+        this->show();
+        this->raise();
+        this->activateWindow();
+        emailEdit->clear();
+        passwordEdit->clear();
+        emailEdit->setFocus();
+    });
 
-    // =====================================================
-    // SIGNUP SUCCESSFUL
-    // =====================================================
-
-    connect(
-        signupWindow,
-        &SignupWindow::signupSuccessful,
-        this,
-        [this]()
-        {
-            this->show();
-
-            this->raise();
-
-            this->activateWindow();
-
-            emailEdit->clear();
-
-            passwordEdit->clear();
-
-            emailEdit->setFocus();
-        }
-        );
-
-
-    // =====================================================
-    // SHOW SIGNUP
-    // =====================================================
+    connect(signupWindow, &SignupWindow::backRequested, this, [this]() {
+        this->show();
+        this->raise();
+        this->activateWindow();
+    });
 
     signupWindow->show();
-
     signupWindow->raise();
-
     signupWindow->activateWindow();
 }

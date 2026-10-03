@@ -12,6 +12,7 @@ class QComboBox;
 class QLabel;
 class QFrame;
 class QGridLayout;
+class QDoubleSpinBox;
 
 class BrowseWindow : public QWidget
 {
@@ -20,6 +21,8 @@ class BrowseWindow : public QWidget
 public:
     explicit BrowseWindow(
         const QString &userName,
+        const QString &initialCategory = QString(),
+        const QString &initialSearch = QString(),
         QWidget *parent = nullptr
     );
 
@@ -34,9 +37,13 @@ signals:
 private slots:
     void handleSearch();
     void handleFilterChanged();
+    void handleResetFilters();
     void handlePrevPage();
     void handleNextPage();
     void handleBack();
+    void handleSearchTextChanged(const QString &text);
+    void fetchSuggestions();
+    void handleSuggestionSelected(int row);
 
 private:
     void setupUI();
@@ -46,7 +53,6 @@ private:
     QWidget* createPaginationBar();
 
     QFrame* createBookCard(const BookModel &book);
-
     void clearBooksGrid();
 
 private:
@@ -54,9 +60,14 @@ private:
 
     QLineEdit *searchEdit;
     QPushButton *searchButton;
+    class QListWidget *suggestionsList;
+    class QTimer *debounceTimer;
     QComboBox *categoryCombo;
     QComboBox *conditionCombo;
     QComboBox *sortCombo;
+    QDoubleSpinBox *minPriceSpin;
+    QDoubleSpinBox *maxPriceSpin;
+    QPushButton *resetFilterButton;
     QPushButton *backButton;
 
     QPushButton *prevPageButton;

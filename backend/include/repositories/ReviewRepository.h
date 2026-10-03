@@ -22,9 +22,15 @@ public:
   PageResult<Review> findByReviewerId(const std::string &reviewerId, int page,
                                      int limit);
 
+  PageResult<Review> findBySellerId(const std::string &sellerId, int page,
+                                    int limit);
+
   bool update(const std::string &id, int rating, const std::string &comment);
 
   bool deleteById(const std::string &id);
 
   std::pair<double, int> calculateRatingAggregate(const std::string &bookId);
+
+  std::pair<double, int> calculateSellerRatingAggregate(const std::string &sellerId);
 };
+

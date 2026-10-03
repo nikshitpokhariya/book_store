@@ -2,6 +2,7 @@
 #define SELLBOOKWINDOW_H
 
 #include <QWidget>
+#include <QString>
 
 class QLineEdit;
 class QTextEdit;
@@ -18,30 +19,26 @@ public:
     explicit SellBookWindow(
         const QString &sellerEmail,
         QWidget *parent = nullptr
-        );
+    );
 
 signals:
-
     void bookPublished();
-
     void backRequested();
 
 private slots:
-
     void selectImage();
-
     void publishBook();
-
     void goBack();
 
 private:
+    void setupUI();
 
+private:
     QString sellerEmail;
 
     // Image
     QLabel *imagePreview;
     QPushButton *chooseImageButton;
-
     QString imagePath;
 
     // Book information
@@ -54,12 +51,8 @@ private:
     QComboBox *conditionCombo;
 
     QDoubleSpinBox *priceSpinBox;
-
-    QLineEdit *locationEdit;
-
     QTextEdit *descriptionEdit;
 
-    // Buttons
     QPushButton *publishButton;
     QPushButton *backButton;
 };

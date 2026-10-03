@@ -28,6 +28,7 @@ public:
                      const BookUpdate &update);
 
   void removeListing(const std::string &id, const std::string &userId);
+  std::vector<std::string> getSuggestions(const std::string &query, int limit);
 
 private:
   BookRepository &books_;

@@ -23,7 +23,8 @@ ReviewService::ReviewService(ReviewRepository &reviews, OrderRepository &orders,
 Review ReviewService::createReview(const std::string &userId,
                                    const std::string &orderId,
                                    const std::string &bookId, int rating,
-                                   const std::string &comment) {
+                                   const std::string &comment,
+                                   const std::vector<std::string> &images) {
   if (userId.empty()) {
     throw std::runtime_error("UNAUTHORIZED");
   }
@@ -92,13 +93,22 @@ Review ReviewService::createReview(const std::string &userId,
         "DUPLICATE_REVIEW: You have already submitted a review for this purchase");
   }
 
+  std::string sellerName = "Seller";
+  auto sellerUser = users_.findById(sellerId);
+  if (sellerUser) {
+    sellerName = sellerUser->username;
+  }
+
   Review review;
   review.bookId = bookId;
   review.orderId = orderId;
+  review.sellerId = sellerId;
+  review.sellerUsername = sellerName;
   review.reviewerId = userId;
   review.reviewerUsername = user->username;
   review.rating = rating;
   review.comment = trimmedComment;
+  review.images = images;
 
   review.id = reviews_.create(review);
 
@@ -114,6 +124,18 @@ PageResult<Review> ReviewService::getBookReviews(const std::string &bookId,
   limit = std::clamp(limit, 1, 50);
   return reviews_.findByBookId(bookId, page, limit);
 }
+
+PageResult<Review> ReviewService::getSellerReviews(const std::string &sellerId,
+                                                  int page, int limit) {
+  page = std::max(1, page);
+  limit = std::clamp(limit, 1, 50);
+  return reviews_.findBySellerId(sellerId, page, limit);
+}
+
+std::pair<double, int> ReviewService::getSellerRating(const std::string &sellerId) {
+  return reviews_.calculateSellerRatingAggregate(sellerId);
+}
+
 
 PageResult<Review> ReviewService::getMyReviews(const std::string &userId,
                                               int page, int limit) {

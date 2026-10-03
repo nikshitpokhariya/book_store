@@ -59,6 +59,12 @@ set(PROJECT_SOURCES
     include/windows/OrderDetailWindow.h
     include/windows/ExchangeWindow.h
 
+    src/AppStyle.cpp
+    include/AppStyle.h
+    src/StyledMessageBox.cpp
+    include/StyledMessageBox.h
+    src/ImageLoader.cpp
+    include/ImageLoader.h
     ui/loginwindow.ui
 )
 
@@ -205,6 +211,12 @@ if(Qt${QT_VERSION_MAJOR}Test_FOUND)
         include/windows/CheckoutWindow.h
         include/windows/OrderDetailWindow.h
         include/windows/ExchangeWindow.h
+        src/AppStyle.cpp
+        include/AppStyle.h
+        src/StyledMessageBox.cpp
+        include/StyledMessageBox.h
+        src/ImageLoader.cpp
+        include/ImageLoader.h
         ui/loginwindow.ui
     )
     target_include_directories(BookBazzarGuiSmokeTest PRIVATE
@@ -225,4 +237,65 @@ if(Qt${QT_VERSION_MAJOR}Test_FOUND)
         Qt${QT_VERSION_MAJOR}::Test
     )
     add_test(NAME BookBazzarGuiSmokeTest COMMAND BookBazzarGuiSmokeTest)
+
+    add_executable(BookBazzarScreenCapture
+        tests/capture_screens.cpp
+        src/database.cpp
+        src/loginwindow.cpp
+        src/signupwindow.cpp
+        src/dashboard.cpp
+        src/homewindow.cpp
+        src/browsewindow.cpp
+        src/bookdetailswindow.cpp
+        src/listingswindow.cpp
+        src/orderswindow.cpp
+        src/sellwindow.cpp
+        src/sellbookwindow.cpp
+        src/network/ApiClient.cpp
+        src/auth/SessionManager.cpp
+        src/windows/CartWindow.cpp
+        src/windows/CheckoutWindow.cpp
+        src/windows/OrderDetailWindow.cpp
+        src/windows/ExchangeWindow.cpp
+        src/AppStyle.cpp
+        include/loginwindow.h
+        include/signupwindow.h
+        include/dashboard.h
+        include/homewindow.h
+        include/browsewindow.h
+        include/bookdetailswindow.h
+        include/listingswindow.h
+        include/orderswindow.h
+        include/sellwindow.h
+        include/sellbookwindow.h
+        include/network/ApiClient.h
+        include/auth/SessionManager.h
+        include/models/DataModels.h
+        include/windows/CartWindow.h
+        include/windows/CheckoutWindow.h
+        include/windows/OrderDetailWindow.h
+        include/windows/ExchangeWindow.h
+        include/AppStyle.h
+        src/StyledMessageBox.cpp
+        include/StyledMessageBox.h
+        src/ImageLoader.cpp
+        include/ImageLoader.h
+        ui/loginwindow.ui
+    )
+    target_include_directories(BookBazzarScreenCapture PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/network
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/auth
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/models
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/windows
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/network
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/auth
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/windows
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests
+    )
+    target_link_libraries(BookBazzarScreenCapture PRIVATE
+        Qt${QT_VERSION_MAJOR}::Widgets
+        Qt${QT_VERSION_MAJOR}::Sql
+        Qt${QT_VERSION_MAJOR}::Network
+    )
 endif()

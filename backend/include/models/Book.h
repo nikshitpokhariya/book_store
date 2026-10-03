@@ -22,6 +22,8 @@ struct Book {
   double price{0.0};
   std::string condition;
   std::string coverImage;
+  std::vector<std::string> images;
+  std::string videoUrl;
   std::string status{"available"};
   double averageRating{0.0};
   int reviewCount{0};
@@ -63,4 +65,6 @@ struct BookUpdate {
   std::optional<double> price;
   std::optional<std::string> condition;
   std::optional<std::string> coverImage;
+  std::optional<std::vector<std::string>> images;
+  std::optional<std::string> videoUrl;
 };
