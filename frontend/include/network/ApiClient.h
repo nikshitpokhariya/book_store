@@ -79,6 +79,14 @@ public:
     }
 
     // =====================================================
+    // Media Upload
+    // =====================================================
+    // Uploads a local media file (image/video) to /api/upload using multipart/form-data.
+    // Invokes callback(success, secureUrl, errorMessage).
+    void uploadMedia(const QString &filePath,
+                     std::function<void(bool success, const QString &url, const QString &errorMsg)> callback);
+
+    // =====================================================
     // Reply parsing helper
     // =====================================================
 

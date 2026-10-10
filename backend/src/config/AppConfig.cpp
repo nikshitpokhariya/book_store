@@ -86,6 +86,10 @@ AppConfig::AppConfig() {
   refreshTokenLifetime_ = getIntEnv("REFRESH_TOKEN_LIFETIME", 2592000);
   secureCookies_ = getBoolEnv("SECURE_COOKIES", false);
 
+  cloudinaryCloudName_ = getEnv("CLOUDINARY_CLOUD_NAME", "");
+  cloudinaryApiKey_ = getEnv("CLOUDINARY_API_KEY", "");
+  cloudinaryApiSecret_ = getEnv("CLOUDINARY_API_SECRET", "");
+
   if (jwtSecret_.size() < 32) {
     throw std::runtime_error("JWT_SECRET must contain at least 32 characters");
   }
@@ -113,3 +117,15 @@ std::int64_t AppConfig::refreshTokenLifetime() const {
 }
 
 bool AppConfig::secureCookies() const { return secureCookies_; }
+
+const std::string &AppConfig::cloudinaryCloudName() const {
+  return cloudinaryCloudName_;
+}
+
+const std::string &AppConfig::cloudinaryApiKey() const {
+  return cloudinaryApiKey_;
+}
+
+const std::string &AppConfig::cloudinaryApiSecret() const {
+  return cloudinaryApiSecret_;
+}

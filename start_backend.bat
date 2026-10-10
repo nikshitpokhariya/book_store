@@ -6,7 +6,14 @@ echo ===================================================
 
 cd /d "%~dp0backend"
 
-if not defined JWT_SECRET set JWT_SECRET=WhWRp7LUnP+BUdQaOxcjpf67hKIBcnk3WAqTrTbzfjOy+CWOdXlgIqsqGTCTHYu7
+REM Load environment variables from .env if present
+if exist ".env" (
+    echo [INFO] Loading configuration from backend\.env
+    for /f "usebackq tokens=1* delims==" %%A in (".env") do (
+        echo %%A | findstr /r "^[ ]*#" >nul || if not "%%A"=="" set "%%A=%%B"
+    )
+)
+
 if not defined MONGO_URI set MONGO_URI=mongodb://127.0.0.1:27017
 if not defined MONGO_DATABASE set MONGO_DATABASE=myapp
 

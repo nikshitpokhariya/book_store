@@ -3,6 +3,10 @@
 #include <QUrl>
 #include <QJsonDocument>
 #include <QNetworkCookieJar>
+#include <QHttpMultiPart>
+#include <QHttpPart>
+#include <QFile>
+#include <QFileInfo>
 
 ApiClient &ApiClient::instance()
 {
@@ -90,6 +94,96 @@ QNetworkReply *ApiClient::deleteResource(const QString &path, const QJsonObject 
         return m_nam->sendCustomRequest(req, "DELETE", data);
     }
     return m_nam->deleteResource(req);
+}
+
+void ApiClient::uploadMedia(const QString &filePath,
+                            std::function<void(bool success, const QString &url, const QString &errorMsg)> callback)
+{
+    QFile *file = new QFile(filePath);
+    if (!file->open(QIODevice::ReadOnly)) {
+        delete file;
+        if (callback) {
+            callback(false, QString(), QStringLiteral("Cannot open file for upload: %1").arg(filePath));
+        }
+        return;
+    }
+
+    QFileInfo fileInfo(filePath);
+    const QString fileName = fileInfo.fileName();
+    const QString suffix = fileInfo.suffix().toLower();
+
+    QString mimeType = QStringLiteral("application/octet-stream");
+    if (suffix == QStringLiteral("jpg") || suffix == QStringLiteral("jpeg")) {
+        mimeType = QStringLiteral("image/jpeg");
+    } else if (suffix == QStringLiteral("png")) {
+        mimeType = QStringLiteral("image/png");
+    } else if (suffix == QStringLiteral("webp")) {
+        mimeType = QStringLiteral("image/webp");
+    } else if (suffix == QStringLiteral("gif")) {
+        mimeType = QStringLiteral("image/gif");
+    } else if (suffix == QStringLiteral("mp4")) {
+        mimeType = QStringLiteral("video/mp4");
+    } else if (suffix == QStringLiteral("mov")) {
+        mimeType = QStringLiteral("video/quicktime");
+    } else if (suffix == QStringLiteral("webm")) {
+        mimeType = QStringLiteral("video/webm");
+    }
+
+    auto *multiPart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
+
+    QHttpPart filePart;
+    filePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(mimeType));
+    filePart.setHeader(
+        QNetworkRequest::ContentDispositionHeader,
+        QVariant(QStringLiteral("form-data; name=\"file\"; filename=\"%1\"").arg(fileName)));
+    filePart.setBodyDevice(file);
+    file->setParent(multiPart);
+
+    multiPart->append(filePart);
+
+    QString fullUrl = QString::fromLatin1(kBaseUrl) + QStringLiteral("/api/upload");
+    QNetworkRequest request(fullUrl);
+
+    const QString token = SessionManager::instance().accessToken();
+    if (!token.isEmpty()) {
+        request.setRawHeader("Authorization", "Bearer " + token.toUtf8());
+    }
+
+    QNetworkReply *reply = m_nam->post(request, multiPart);
+    multiPart->setParent(reply);
+
+    connect(reply, &QNetworkReply::finished, [reply, callback]() {
+        auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
+        reply->deleteLater();
+
+        if (!ok) {
+            if (callback) {
+                callback(false, QString(), errorMsg.isEmpty() ? QStringLiteral("Upload failed") : errorMsg);
+            }
+            return;
+        }
+
+        QString url;
+        if (json.contains(QStringLiteral("url")) && json[QStringLiteral("url")].isString()) {
+            url = json[QStringLiteral("url")].toString();
+        } else if (json.contains(QStringLiteral("secure_url")) && json[QStringLiteral("secure_url")].isString()) {
+            url = json[QStringLiteral("secure_url")].toString();
+        } else if (json.contains(QStringLiteral("data")) && json[QStringLiteral("data")].isObject()) {
+            QJsonObject data = json[QStringLiteral("data")].toObject();
+            url = data.value(QStringLiteral("url")).toString();
+        }
+
+        if (url.isEmpty()) {
+            if (callback) {
+                callback(false, QString(), QStringLiteral("Upload service did not return an image URL"));
+            }
+            return;
+        }
+
+        if (callback) {
+            callback(true, url, QString());
+        }
+    });
 }
 
 std::tuple<bool, QJsonObject, QString> ApiClient::parseReply(QNetworkReply *reply)

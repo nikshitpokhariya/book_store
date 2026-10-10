@@ -44,7 +44,6 @@ QString ImageLoader::resolveLocalPath(const QString &pathOrUrl)
 
     if (!filename.isEmpty()) {
         const QStringList candidates = {
-            QStringLiteral("d:/1Hello-World/1pbl-oops/backend/public/uploads/") + filename,
             QDir::currentPath() + QStringLiteral("/../backend/public/uploads/") + filename,
             QDir::currentPath() + QStringLiteral("/../../backend/public/uploads/") + filename,
             QDir::currentPath() + QStringLiteral("/backend/public/uploads/") + filename

@@ -651,49 +651,7 @@ void OrderDetailWindow::handleProcessReturn(bool approve)
     });
 }
 
-static QString copyConditionPhotoToUploads(const QString &sourcePath)
-{
-    QFileInfo sourceInfo(sourcePath);
-    if (!sourceInfo.exists()) {
-        return QString();
-    }
 
-    const QString extension = sourceInfo.suffix().toLower();
-    const QString fileName = sourceInfo.completeBaseName() + "_" +
-                             QString::number(QDateTime::currentMSecsSinceEpoch()) +
-                             "." + extension;
-
-    const QStringList candidates = {
-        QStringLiteral("d:/1Hello-World/1pbl-oops/backend/public/uploads"),
-        QDir::currentPath() + QStringLiteral("/../backend/public/uploads"),
-        QDir::currentPath() + QStringLiteral("/../../backend/public/uploads"),
-        QDir::currentPath() + QStringLiteral("/backend/public/uploads")
-    };
-
-    QString targetDir;
-    for (const auto &c : candidates) {
-        QDir d(c);
-        if (d.exists()) {
-            targetDir = d.canonicalPath();
-            break;
-        }
-    }
-
-    if (!targetDir.isEmpty()) {
-        const QString destFile = targetDir + "/" + fileName;
-        if (QFile::copy(sourcePath, destFile)) {
-            return QStringLiteral("http://localhost:8080/uploads/") + fileName;
-        }
-    }
-
-    const QString appDataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/uploads";
-    QDir(appDataPath).mkpath(".");
-    const QString fallbackFile = appDataPath + "/" + fileName;
-    if (QFile::copy(sourcePath, fallbackFile)) {
-        return fallbackFile;
-    }
-    return QString();
-}
 
 void OrderDetailWindow::handleWriteReview(const QString &bookId, const QString &bookTitle)
 {
@@ -840,39 +798,69 @@ void OrderDetailWindow::handleWriteReview(const QString &bookId, const QString &
         subBtn->setEnabled(false);
         subBtn->setText("Submitting...");
 
-        QJsonArray imagesArray;
-        for (const auto &p : attachedPhotoPaths) {
-            QString uploaded = copyConditionPhotoToUploads(p);
-            if (!uploaded.isEmpty()) {
-                imagesArray.append(uploaded);
+        auto imagesArray = std::make_shared<QJsonArray>();
+        auto photoIndex = std::make_shared<int>(0);
+        const int totalPhotos = attachedPhotoPaths.size();
+
+        auto sendReviewRequest = [this, &dialog, subBtn, bookId, rSpin, comment, imagesArray]() {
+            subBtn->setText("Submitting Review...");
+            QJsonObject body;
+            body[QStringLiteral("orderId")] = m_orderId;
+            body[QStringLiteral("bookId")] = bookId;
+            body[QStringLiteral("rating")] = rSpin->value();
+            body[QStringLiteral("comment")] = comment;
+            if (!imagesArray->isEmpty()) {
+                body[QStringLiteral("images")] = *imagesArray;
             }
+
+            auto *reply = ApiClient::instance().post(QStringLiteral("/api/reviews"), body, true);
+            connect(reply, &QNetworkReply::finished, [reply, &dialog, subBtn, this]() {
+                auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
+                reply->deleteLater();
+
+                subBtn->setEnabled(true);
+                subBtn->setText("Submit Seller Review");
+
+                if (ok) {
+                    StyledMessageBox::success(this, "Review Submitted", "Thank you! Your seller rating and condition photos have been published.");
+                    dialog.accept();
+                    loadOrder();
+                } else {
+                    StyledMessageBox::warning(&dialog, "Submission Failed", errorMsg.isEmpty() ? "Unable to submit review." : errorMsg);
+                }
+            });
+        };
+
+        if (totalPhotos == 0) {
+            sendReviewRequest();
+            return;
         }
 
-        QJsonObject body;
-        body[QStringLiteral("orderId")] = m_orderId;
-        body[QStringLiteral("bookId")] = bookId;
-        body[QStringLiteral("rating")] = rSpin->value();
-        body[QStringLiteral("comment")] = comment;
-        if (!imagesArray.isEmpty()) {
-            body[QStringLiteral("images")] = imagesArray;
-        }
+        auto uploadNextPhoto = std::make_shared<std::function<void()>>();
+        *uploadNextPhoto = [this, &dialog, subBtn, imagesArray, photoIndex, totalPhotos, uploadNextPhoto, sendReviewRequest, &attachedPhotoPaths]() {
+            if (*photoIndex < totalPhotos) {
+                const QString path = attachedPhotoPaths.at(*photoIndex);
+                subBtn->setText(QString("Uploading photo %1 of %2...").arg(*photoIndex + 1).arg(totalPhotos));
 
-        auto *reply = ApiClient::instance().post(QStringLiteral("/api/reviews"), body, true);
-        connect(reply, &QNetworkReply::finished, [reply, &dialog, subBtn, this]() {
-            auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
-            reply->deleteLater();
+                ApiClient::instance().uploadMedia(path, [this, &dialog, subBtn, imagesArray, photoIndex, totalPhotos, uploadNextPhoto, sendReviewRequest](bool ok, const QString &url, const QString &err) {
+                    if (!ok) {
+                        subBtn->setEnabled(true);
+                        subBtn->setText("Submit Seller Review");
+                        StyledMessageBox::warning(&dialog, "Upload Failed", QString("Failed to upload photo %1: %2").arg(*photoIndex + 1).arg(err));
+                        return;
+                    }
 
-            subBtn->setEnabled(true);
-            subBtn->setText("Submit Seller Review");
-
-            if (ok) {
-                StyledMessageBox::success(this, "Review Submitted", "Thank you! Your seller rating and condition photos have been published.");
-                dialog.accept();
-                loadOrder();
-            } else {
-                StyledMessageBox::warning(&dialog, "Submission Failed", errorMsg.isEmpty() ? "Unable to submit review." : errorMsg);
+                    imagesArray->append(url);
+                    (*photoIndex)++;
+                    (*uploadNextPhoto)();
+                });
+                return;
             }
-        });
+
+            sendReviewRequest();
+        };
+
+        (*uploadNextPhoto)();
     });
 
     dialog.exec();

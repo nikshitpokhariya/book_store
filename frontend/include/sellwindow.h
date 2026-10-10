@@ -43,7 +43,16 @@ private:
     void setupUI();
     void updateImageSlotsUI();
     void updateVideoUI();
-    QString copyMediaToUploads(const QString &sourcePath);
+    void finishBookPublishing(
+        const QStringList &uploadedUrls,
+        const QString &videoUrl,
+        const QString &title,
+        const QString &author,
+        double price,
+        const QString &condition,
+        const QString &category,
+        const QString &isbn
+    );
 
     QString sellerName;
 

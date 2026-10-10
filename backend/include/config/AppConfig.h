@@ -18,6 +18,10 @@ public:
 
   bool secureCookies() const;
 
+  const std::string &cloudinaryCloudName() const;
+  const std::string &cloudinaryApiKey() const;
+  const std::string &cloudinaryApiSecret() const;
+
 private:
   AppConfig();
 
@@ -31,4 +35,8 @@ private:
   std::int64_t refreshTokenLifetime_;
 
   bool secureCookies_;
+
+  std::string cloudinaryCloudName_;
+  std::string cloudinaryApiKey_;
+  std::string cloudinaryApiSecret_;
 };

@@ -3,6 +3,11 @@
 #include "config/AppConfig.h"
 #include "controllers/AuthController.h"
 #include "controllers/BookController.h"
+#include "controllers/CartController.h"
+#include "controllers/ExchangeController.h"
+#include "controllers/OrderController.h"
+#include "controllers/ReviewController.h"
+#include "controllers/UploadController.h"
 #include "db/MongoDatabase.h"
 
 int main() {
@@ -15,6 +20,11 @@ int main() {
 
     AuthController::initPathRouting();
     BookController::initPathRouting();
+    CartController::initPathRouting();
+    ExchangeController::initPathRouting();
+    OrderController::initPathRouting();
+    ReviewController::initPathRouting();
+    UploadController::initPathRouting();
 
     drogon::app().loadConfigFile("config.json").run();
   } catch (const std::exception &e) {

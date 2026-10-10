@@ -147,7 +147,7 @@ endif()
 # Testing
 # ==============================
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Test QUIET)
-if(Qt${QT_VERSION_MAJOR}Test_FOUND)
+if(Qt${QT_VERSION_MAJOR}Test_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/main_test.cpp")
     enable_testing()
     add_executable(BookBazzarTests
         tests/main_test.cpp

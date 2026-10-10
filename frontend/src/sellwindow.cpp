@@ -631,53 +631,6 @@ void SellWindow::removeVideo()
     updateVideoUI();
 }
 
-QString SellWindow::copyMediaToUploads(const QString &sourcePath)
-{
-    QFileInfo sourceInfo(sourcePath);
-    if (!sourceInfo.exists()) {
-        return QString();
-    }
-
-    const QString extension = sourceInfo.suffix().toLower();
-    const QString fileName = sourceInfo.completeBaseName() + "_" +
-                             QString::number(QDateTime::currentMSecsSinceEpoch()) +
-                             "." + extension;
-
-    // Target upload locations
-    const QStringList candidates = {
-        QStringLiteral("d:/1Hello-World/1pbl-oops/backend/public/uploads"),
-        QDir::currentPath() + QStringLiteral("/../backend/public/uploads"),
-        QDir::currentPath() + QStringLiteral("/../../backend/public/uploads"),
-        QDir::currentPath() + QStringLiteral("/backend/public/uploads")
-    };
-
-    QString targetDir;
-    for (const auto &c : candidates) {
-        QDir d(c);
-        if (d.exists()) {
-            targetDir = d.canonicalPath();
-            break;
-        }
-    }
-
-    if (!targetDir.isEmpty()) {
-        const QString destFile = targetDir + "/" + fileName;
-        if (QFile::copy(sourcePath, destFile)) {
-            return QStringLiteral("http://localhost:8080/uploads/") + fileName;
-        }
-    }
-
-    // Fallback to app data
-    const QString appDataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/uploads";
-    QDir(appDataPath).mkpath(".");
-    const QString fallbackFile = appDataPath + "/" + fileName;
-    if (QFile::copy(sourcePath, fallbackFile)) {
-        return fallbackFile;
-    }
-
-    return QString();
-}
-
 void SellWindow::sellBook()
 {
     const QString title = titleEdit ? titleEdit->text().trimmed() : QString();
@@ -725,31 +678,66 @@ void SellWindow::sellBook()
     }
 
     sellButton->setEnabled(false);
-    sellButton->setText("Uploading & Publishing...");
+    sellButton->setText(QString("Uploading image 1 of %1...").arg(selectedImagePaths.size()));
 
-    // Copy photos
-    QStringList uploadedImageUrls;
-    for (const auto &imgPath : selectedImagePaths) {
-        QString uploaded = copyMediaToUploads(imgPath);
-        if (!uploaded.isEmpty()) {
-            uploadedImageUrls.append(uploaded);
+    auto uploadedUrls = std::make_shared<QStringList>();
+    auto currentIndex = std::make_shared<int>(0);
+    const int totalCount = selectedImagePaths.size();
+
+    auto uploadNextImage = std::make_shared<std::function<void()>>();
+    *uploadNextImage = [this, uploadedUrls, currentIndex, totalCount, uploadNextImage,
+                        title, author, price, condition, category, isbn]() {
+        if (*currentIndex < totalCount) {
+            const QString path = selectedImagePaths.at(*currentIndex);
+            sellButton->setText(QString("Uploading image %1 of %2...").arg(*currentIndex + 1).arg(totalCount));
+
+            ApiClient::instance().uploadMedia(path, [this, uploadedUrls, currentIndex, totalCount, uploadNextImage,
+                                                     title, author, price, condition, category, isbn](bool ok, const QString &url, const QString &err) {
+                if (!ok) {
+                    sellButton->setEnabled(true);
+                    sellButton->setText("Publish Book Listing");
+                    StyledMessageBox::critical(this, "Upload Failed",
+                        QString("Failed to upload image %1: %2").arg(*currentIndex + 1).arg(err));
+                    return;
+                }
+
+                uploadedUrls->append(url);
+                (*currentIndex)++;
+                (*uploadNextImage)();
+            });
+            return;
         }
-    }
 
-    if (uploadedImageUrls.size() < 4) {
-        sellButton->setEnabled(true);
-        sellButton->setText("Publish Book Listing");
-        StyledMessageBox::critical(this, "Upload Failed", "Could not process all book photos. Please try selecting the files again.");
-        return;
-    }
+        // All photos uploaded! Upload video if selected
+        if (!selectedVideoPath.isEmpty()) {
+            sellButton->setText("Uploading video preview...");
+            ApiClient::instance().uploadMedia(selectedVideoPath, [this, uploadedUrls, title, author, price, condition, category, isbn](bool ok, const QString &videoUrl, const QString &err) {
+                if (!ok) {
+                    StyledMessageBox::warning(this, "Video Upload Warning",
+                        QString("Video upload failed (%1). The listing will be published without video.").arg(err));
+                }
+                finishBookPublishing(*uploadedUrls, ok ? videoUrl : QString(), title, author, price, condition, category, isbn);
+            });
+        } else {
+            finishBookPublishing(*uploadedUrls, QString(), title, author, price, condition, category, isbn);
+        }
+    };
 
-    // Copy video if provided
-    QString uploadedVideoUrl;
-    if (!selectedVideoPath.isEmpty()) {
-        uploadedVideoUrl = copyMediaToUploads(selectedVideoPath);
-    }
+    (*uploadNextImage)();
+}
 
-    // Build JSON request
+void SellWindow::finishBookPublishing(
+    const QStringList &uploadedUrls,
+    const QString &videoUrl,
+    const QString &title,
+    const QString &author,
+    double price,
+    const QString &condition,
+    const QString &category,
+    const QString &isbn)
+{
+    sellButton->setText("Publishing Book Listing...");
+
     QJsonObject body;
     body[QStringLiteral("title")] = title;
     body[QStringLiteral("author")] = author;
@@ -757,25 +745,26 @@ void SellWindow::sellBook()
     body[QStringLiteral("condition")] = condition;
     body[QStringLiteral("category")] = category;
     body[QStringLiteral("isbn")] = isbn;
-    if (selectedThumbnailIndex >= uploadedImageUrls.size()) {
-        selectedThumbnailIndex = 0;
+
+    int thumbIdx = selectedThumbnailIndex;
+    if (thumbIdx >= uploadedUrls.size()) {
+        thumbIdx = 0;
     }
-    const QString primaryCover = uploadedImageUrls.value(selectedThumbnailIndex);
+    const QString primaryCover = uploadedUrls.value(thumbIdx);
     body[QStringLiteral("coverImage")] = primaryCover;
 
     QJsonArray imgArray;
     imgArray.append(primaryCover);
-    for (int i = 0; i < uploadedImageUrls.size(); ++i) {
-        if (i != selectedThumbnailIndex) {
-            imgArray.append(uploadedImageUrls[i]);
+    for (int i = 0; i < uploadedUrls.size(); ++i) {
+        if (i != thumbIdx) {
+            imgArray.append(uploadedUrls[i]);
         }
     }
     body[QStringLiteral("images")] = imgArray;
 
-    if (!uploadedVideoUrl.isEmpty()) {
-        body[QStringLiteral("videoUrl")] = uploadedVideoUrl;
+    if (!videoUrl.isEmpty()) {
+        body[QStringLiteral("videoUrl")] = videoUrl;
     }
-
 
     auto *reply = ApiClient::instance().post(QStringLiteral("/api/books"), body, true);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
