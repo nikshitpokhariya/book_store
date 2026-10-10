@@ -10,9 +10,22 @@ Write-Host "  Cloudinary Upload & Delivery Verification" -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Cyan
 
 # 1. Parse .env Configuration
-$envFile = Join-Path $PSScriptRoot "backend\.env"
-if (Test-Path $envFile) {
-    Write-Host "[1/4] Reading backend\.env configuration..." -ForegroundColor Yellow
+$possibleEnvPaths = @(
+    (Join-Path $PSScriptRoot "..\.env"),
+    (Join-Path $PSScriptRoot ".env"),
+    (Join-Path $PSScriptRoot "backend\.env")
+)
+
+$envFile = $null
+foreach ($p in $possibleEnvPaths) {
+    if (Test-Path $p) {
+        $envFile = (Resolve-Path $p).Path
+        break
+    }
+}
+
+if ($envFile) {
+    Write-Host "[1/4] Reading $envFile configuration..." -ForegroundColor Yellow
     Get-Content $envFile | ForEach-Object {
         $line = $_.Trim()
         if ($line -and -not $line.StartsWith("#")) {
@@ -29,7 +42,7 @@ $apiKey = [Environment]::GetEnvironmentVariable("CLOUDINARY_API_KEY")
 $apiSecret = [Environment]::GetEnvironmentVariable("CLOUDINARY_API_SECRET")
 
 if (-not $cloudName -or -not $apiKey -or -not $apiSecret) {
-    Write-Host "      [WARNING] Cloudinary credentials not configured in backend\.env or environment." -ForegroundColor Yellow
+    Write-Host "      [WARNING] Cloudinary credentials not configured in .env or environment." -ForegroundColor Yellow
     exit 1
 }
 

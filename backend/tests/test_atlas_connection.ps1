@@ -10,9 +10,22 @@ Write-Host "  MongoDB Atlas Connection & Integration Verification" -ForegroundCo
 Write-Host "==========================================================" -ForegroundColor Cyan
 
 # 1. Parse .env Configuration
-$envFile = Join-Path $PSScriptRoot "backend\.env"
-if (Test-Path $envFile) {
-    Write-Host "[1/4] Reading backend\.env configuration..." -ForegroundColor Yellow
+$possibleEnvPaths = @(
+    (Join-Path $PSScriptRoot "..\.env"),
+    (Join-Path $PSScriptRoot ".env"),
+    (Join-Path $PSScriptRoot "backend\.env")
+)
+
+$envFile = $null
+foreach ($p in $possibleEnvPaths) {
+    if (Test-Path $p) {
+        $envFile = (Resolve-Path $p).Path
+        break
+    }
+}
+
+if ($envFile) {
+    Write-Host "[1/4] Reading $envFile configuration..." -ForegroundColor Yellow
     Get-Content $envFile | ForEach-Object {
         $line = $_.Trim()
         if ($line -and -not $line.StartsWith("#")) {
@@ -26,7 +39,7 @@ if (Test-Path $envFile) {
 
 $mongoUri = [Environment]::GetEnvironmentVariable("MONGO_URI")
 if (-not $mongoUri) {
-    Write-Host "      [WARNING] MONGO_URI not configured in backend\.env or environment." -ForegroundColor Yellow
+    Write-Host "      [WARNING] MONGO_URI not configured in .env or environment." -ForegroundColor Yellow
     exit 1
 }
 $mongoDb = [Environment]::GetEnvironmentVariable("MONGO_DATABASE")

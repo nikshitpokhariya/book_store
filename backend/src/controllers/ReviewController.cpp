@@ -61,11 +61,13 @@ int parseIntParam(const std::string &val, int defaultValue) {
   }
 }
 
-Json::Value reviewJson(const Review &rev) {
+Json::Value reviewJson(const Review &rev, bool includeOrderId = false) {
   Json::Value json;
   json["id"] = rev.id;
   json["bookId"] = rev.bookId;
-  json["orderId"] = rev.orderId;
+  if (includeOrderId) {
+    json["orderId"] = rev.orderId;
+  }
   json["sellerId"] = rev.sellerId;
   json["sellerUsername"] = rev.sellerUsername;
   json["reviewerId"] = rev.reviewerId;

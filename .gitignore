@@ -5,6 +5,8 @@
 # Build directories
 build/
 build-*/
+build_vs/
+**/build_vs/
 cmake-build-*/
 bin/
 out/
@@ -50,6 +52,7 @@ vcpkg_installed/
 # IDE / Editor folders
 .vscode/
 .idea/
+.kilo/
 
 # OS files
 .DS_Store

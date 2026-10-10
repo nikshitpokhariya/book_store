@@ -227,7 +227,7 @@ void UploadController::upload(
   auto cloudReq = HttpRequest::newHttpRequest();
   cloudReq->setMethod(Post);
   cloudReq->setPath("/v1_1/" + cloudName + "/" + resourceType + "/upload");
-  cloudReq->setContentTypeCodeAndCustomString(CT_CUSTOM, "multipart/form-data; boundary=" + boundary);
+  cloudReq->setContentTypeString("multipart/form-data; boundary=" + boundary);
   cloudReq->setBody(std::move(body));
 
   client->sendRequest(

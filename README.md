@@ -1,30 +1,43 @@
-# BookBazzar — Peer-to-Peer Book Marketplace & Exchange Platform
+# BookBazzar — Peer-to-Peer Book Marketplace & Barter Exchange Platform
 
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg?style=flat&logo=c%2B%2B)](https://en.wikipedia.org/wiki/C%2B%2B20)
-[![Qt 6](https://img.shields.io/badge/Qt-6.x-green.svg?style=flat&logo=qt)](https://www.qt.io/)
-[![Drogon Framework](https://img.shields.io/badge/Drogon-1.9.x-orange.svg?style=flat)](https://github.com/drogonframework/drogon)
-[![MongoDB](https://img.shields.io/badge/MongoDB-7.x%20%2F%208.x-brightgreen.svg?style=flat&logo=mongodb)](https://www.mongodb.com/)
+[![Qt 6](https://img.shields.io/badge/Qt-6.12.0-green.svg?style=flat&logo=qt)](https://www.qt.io/)
+[![Drogon Framework](https://img.shields.io/badge/Drogon-1.9.13-orange.svg?style=flat)](https://github.com/drogonframework/drogon)
+[![MongoDB Atlas](https://img.shields.io/badge/MongoDB-Atlas%208.0-brightgreen.svg?style=flat&logo=mongodb)](https://www.mongodb.com/atlas)
+[![Cloudinary CDN](https://img.shields.io/badge/Cloudinary-Media%20CDN-blueviolet.svg?style=flat&logo=cloudinary)](https://cloudinary.com/)
 [![CMake](https://img.shields.io/badge/CMake-3.20%2B-informational.svg?style=flat&logo=cmake)](https://cmake.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-An end-to-end, high-performance C++ peer-to-peer book marketplace and direct barter exchange platform. **BookBazzar** enables college students and book enthusiasts to purchase pre-owned books, sell their personal collection, or atomically swap books directly with peers without monetary transactions.
+An end-to-end, high-performance full-stack C++ peer-to-peer book marketplace and direct physical barter exchange platform. **BookBazzar** enables college students and book enthusiasts to purchase pre-owned books, sell personal collections with cloud-hosted photo/video walkthroughs, or atomically swap physical books directly with peers without monetary transactions.
 
 ---
 
-## 1. What We Provide
+## 📑 Quick Navigation
+- [What BookBazzar Provides](#-what-bookbazzar-provides)
+- [System Architecture & Cloud Flow](#-system-architecture--cloud-flow)
+- [Repository Structure](#-repository-structure)
+- [Technology Stack](#-technology-stack)
+- [Quick Start Guide](#-quick-start-guide)
+- [REST API Specifications](#-rest-api-specifications)
+- [Automated Testing & QA Verification](#-automated-testing--qa-verification)
+- [Future Implementations Roadmap](#-future-implementations-roadmap)
+
+---
+
+## 🌟 What BookBazzar Provides
 
 BookBazzar is engineered as a production-grade full-stack C++ application combining a modern asynchronous REST API backend with an intuitive, native desktop graphical interface:
 
 ### 🛒 1. Cash-Based Marketplace (Buy & Sell)
-- **Book Discovery & Search**: Fast text search across titles, authors, and ISBNs with dynamic filters for condition (`New`, `Like New`, `Very Good`, `Good`, `Acceptable`), category, and price range.
-- **Form-Driven Selling**: Sellers can list books with real cover photos, detailed descriptions, condition tags, and custom pricing.
+- **Book Discovery & Instant Search**: High-speed text search across titles, authors, and ISBNs with dynamic filters for condition (`New`, `Like New`, `Very Good`, `Good`, `Acceptable`), category, and price range.
+- **Form-Driven Selling with Cloud Media**: Sellers list books with high-resolution cover photos and condition video previews uploaded directly to **Cloudinary CDN** with automatic signed REST authentication.
 - **Persistent Shopping Cart**: Real-time server-synced cart with single-copy inventory clamping and automatic stale-item detection if another buyer checks out first.
 - **Atomic Checkout & Simulated Payments**: Race-condition-free purchase locking preventing double-buys; simulated instant payments (`UPI`, `CARD`, `COD`) with ₹0 shipping.
 
 ### 🔄 2. Direct Peer-to-Peer Barter Book Exchange
-- **Zero-Money Book Swapping**: Propose swapping any book you own for another user's listing.
+- **Zero-Money Book Swapping**: Propose swapping any owned book for another user's listing.
 - **Two-Sided Atomic Ownership Transfer**: When the recipient accepts an exchange, book ownership is atomically transferred in MongoDB, listings are removed from public search, and transaction histories are logged.
-- **Conflict Prevention**: If a book proposed for exchange is concurrently sold in the marketplace, the exchange is cleanly aborted to ensure data consistency.
+- **Conflict Prevention**: If a book proposed for exchange is concurrently purchased in the marketplace, the exchange is cleanly aborted with HTTP `409 Conflict` to guarantee data consistency.
 
 ### 📦 3. Post-Purchase Fulfillment, Returns & Cancellations
 - **Delivery Lifecycle Tracking**: Live progression from `PLACED` → `CONFIRMED` → `PACKED` → `SHIPPED` → `OUT_FOR_DELIVERY` → `DELIVERED` with tracking numbers.
@@ -43,23 +56,25 @@ BookBazzar is engineered as a production-grade full-stack C++ application combin
 
 ---
 
-## 2. System Architecture
+## 🏛️ System Architecture & Cloud Flow
 
 ```mermaid
 flowchart TD
     subgraph Client["Qt 6 Desktop Client (BookBazzar)"]
-        UI["Qt Widgets GUI\n(Home, Browse, Cart, Checkout, Exchange, Orders)"]
+        UI["Qt Widgets Modern GUI\n(Home, Browse, Cart, Checkout, Exchange, Orders, Sell)"]
         SM["SessionManager\n(JWT & Profile State)"]
         AC["ApiClient (QNetworkAccessManager)\n(Base URL: http://127.0.0.1:8080)"]
+        IL["ImageLoader\n(Async Remote Pixmap Cache)"]
         UI --> SM
         UI --> AC
+        UI --> IL
         SM --> AC
     end
 
     subgraph Backend["Drogon C++20 REST API (BookExchangeBackend)"]
         ROUTER["Drogon HTTP Listener (:8080)"]
         AUTH["AuthFilter (JWT Guard)"]
-        CTRL["Controllers\n(Auth, Books, Cart, Checkout, Orders, Exchanges, Reviews)"]
+        CTRL["Controllers\n(Auth, Books, Cart, Checkout, Orders, Exchanges, Reviews, Upload)"]
         SRV["Business Services & State Machines"]
         REPO["Repositories (mongocxx / bsoncxx)"]
 
@@ -69,182 +84,212 @@ flowchart TD
         SRV --> REPO
     end
 
-    subgraph Storage["Database Storage"]
-        MONGO[("MongoDB 7.x / 8.x\n(:27017)\nDB: myapp")]
-        REPO --> MONGO
+    subgraph CloudStorage["Cloud Infrastructure"]
+        ATLAS[("MongoDB Atlas 8.0 Cluster\n(mongodb+srv://...)\nReplica Set & High Availability")]
+        CLOUDINARY["Cloudinary Media CDN\n(Signed Image & Video Storage)"]
+        REPO --> ATLAS
+        CTRL --> CLOUDINARY
+        IL -. "Cached Pixmaps" .-> CLOUDINARY
     end
 
-    AC -- "HTTP / REST (JSON + Bearer JWT)" --> ROUTER
+    AC -- "HTTP / REST (JSON + Bearer JWT + Multipart)" --> ROUTER
 ```
 
 ---
 
-## 3. Repository Structure
+## 📁 Repository Structure
 
 ```
 .
-├── backend/                        # C++20 Drogon REST API Backend
-│   ├── CMakeLists.txt              # vcpkg-integrated build configuration
-│   ├── vcpkg.json                  # Manifest (drogon, mongocxx, argon2, jwt-cpp)
-│   ├── config.json                 # Drogon server listener & thread settings
-│   ├── start_server.ps1            # Helper script to start backend server
-│   ├── include/                    # Public C++ headers
-│   │   ├── config/AppConfig.h      # Environment & configuration loader
-│   │   ├── db/MongoDatabase.h      # MongoDB connection manager & indexes
-│   │   ├── controllers/            # Drogon REST controllers
-│   │   ├── models/                 # Domain structs (Book, User, Cart, Order, etc.)
-│   │   ├── repositories/           # Mongo data access layer
-│   │   ├── security/               # Argon2id, JWT, and Payment services
-│   │   └── services/               # Core business orchestration
-│   ├── src/                        # Implementations matching include/
-│   └── tests/                      # Automated test scripts (91 QA integration tests)
+├── backend/                            # C++20 Drogon REST API Backend
+│   ├── CMakeLists.txt                  # vcpkg-integrated build configuration
+│   ├── vcpkg.json                      # Manifest (drogon, mongocxx, argon2, jwt-cpp, jsoncpp)
+│   ├── config.json                     # Drogon server listener & thread settings
+│   ├── .env.example                    # Environment variable template (Atlas & Cloudinary)
+│   ├── include/                        # C++ architecture headers
+│   │   ├── config/AppConfig.h          # Environment & configuration loader (Singleton)
+│   │   ├── db/MongoDatabase.h          # MongoDB client manager & automated index creator
+│   │   ├── controllers/                # REST Controllers (Auth, Book, Cart, Order, Exchange, Review, Upload)
+│   │   ├── models/                     # Domain structs (Book, User, Cart, Order, Exchange, Review)
+│   │   ├── repositories/               # Mongo data access layer using mongocxx
+│   │   ├── security/                   # Argon2id, JWT, and Payment services
+│   │   └── services/                   # Business domain orchestration
+│   ├── src/                            # Implementation files matching include/
+│   └── tests/                          # Automated backend test suites
+│       ├── test_qa_suite.ps1           # Master QA suite (94 tests, 100% pass rate)
+│       ├── test_atlas_connection.ps1   # Atlas DNS SRV & TCP connectivity verification
+│       ├── test_cloudinary_upload.ps1  # Cloudinary multipart upload & CDN test
+│       ├── test_marketplace.ps1        # Phase 1 — Book marketplace (16 tests)
+│       ├── test_buy_sell.ps1           # Phase 2 — Cart, checkout & payment (23 tests)
+│       ├── test_exchange.ps1           # Phase 3 — Peer-to-peer exchange (24 tests)
+│       ├── test_phase4.ps1             # Phase 4 — Reviews, cancel & returns (24 tests)
+│       └── BookExchangeBackend.postman_collection.json
 │
-├── frontend/                       # Qt6 Desktop Client GUI
-│   ├── CMakeLists.txt              # Qt6 CMake build configuration
-│   ├── include/                    # C++ headers
-│   │   ├── auth/SessionManager.h   # In-memory JWT and user state
-│   │   ├── models/DataModels.h     # Client domain models & JSON parsers
-│   │   ├── network/ApiClient.h     # Asynchronous REST HTTP client
-│   │   ├── windows/                # Window classes (Cart, Checkout, Orders, etc.)
-│   │   └── ...                     # Core GUI headers
-│   ├── src/                        # GUI implementations matching include/
-│   ├── tests/                      # Qt6::Test unit and contract test suites
-│   └── ui/                         # Qt Designer UI forms
+├── frontend/                           # Qt 6 Desktop Client Application
+│   ├── CMakeLists.txt                  # Qt6 CMake build configuration (BookBazzar & Tests)
+│   ├── include/                        # Client headers (network, auth, models, windows)
+│   ├── src/                            # GUI & network client implementations
+│   ├── tests/                          # Automated Qt Test suites (BookBazzarTests & GuiSmokeTest)
+│   └── ui/                             # Qt Designer forms (loginwindow.ui)
 │
-└── README.md                       # Master project overview
+├── future.md                           # Comprehensive production scaling & engineering roadmap
+├── start.md                            # Complete startup & execution guide
+├── start_backend.bat                   # 1-Click backend server launcher
+├── start_mongo.bat                     # Local MongoDB daemon launcher fallback
+└── README.md                           # Master project documentation
 ```
 
 ---
 
-## 4. Tech Stack
+## 🛠️ Technology Stack
 
 | Domain | Technology | Version | Purpose |
 | :--- | :--- | :---: | :--- |
-| **Backend Core** | C++ | ISO C++20 | REST API business logic & data operations |
-| **Backend Framework** | [Drogon](https://github.com/drogonframework/drogon) | 1.9.x | High-throughput asynchronous HTTP REST server |
-| **Database** | MongoDB | 7.x / 8.x | Document database using `mongocxx` 3.10+ |
-| **Desktop Client** | Qt Widgets | Qt 6.x / Qt 5.x | Cross-platform responsive desktop GUI |
-| **Security & Cryptography** | Argon2 + OpenSSL | Argon2id / 3.x | Password hashing and cryptographic token generation |
-| **Authentication** | [jwt-cpp](https://github.com/Thalhammer/jwt-cpp) | 0.7.x | HS256 JSON Web Token encode and decode |
-| **JSON Serialization** | JsonCpp / QJsonDocument | 1.9.x / Qt 6 | High-speed JSON serialization |
-| **Package Management** | vcpkg | Manifest Mode | Backend C++ library acquisition |
-| **Build System** | CMake | ≥ 3.20 | Multi-platform compilation system |
+| **Backend Core** | C++ | ISO C++20 | REST API business logic & concurrency |
+| **Backend Framework** | [Drogon](https://github.com/drogonframework/drogon) | 1.9.13 | High-throughput asynchronous non-blocking HTTP server |
+| **Cloud Database** | MongoDB Atlas | 7.x / 8.0 | High-availability cloud document store via `mongocxx` 4.4+ |
+| **Cloud Media CDN** | Cloudinary | REST API v1.1 | Scalable book cover image & video walkthrough CDN storage |
+| **Desktop Client** | Qt Widgets | Qt 6.12.0 / 6.x | Native, responsive desktop GUI with dark-mode styling |
+| **Security** | Argon2id + OpenSSL | 3.x | Memory-hard password hashing & CSPRNG cryptographic salting |
+| **Tokens** | [jwt-cpp](https://github.com/Thalhammer/jwt-cpp) | 0.7.x | HS256 JWT access tokens & rotating SHA-256 refresh cookies |
+| **JSON Serialization** | JsonCpp / QJsonDocument | 1.9.x / Qt 6 | High-speed JSON encode and decode |
+| **Package Management** | vcpkg | Manifest Mode | C++ library acquisition and toolchain integration |
+| **Build System** | CMake + Ninja | ≥ 3.20 | Cross-platform build generation with AUTOMOC & AUTOUIC |
 
 ---
 
-## 5. Quick Start Guide
+## ⚡ Quick Start Guide
 
-### Prerequisites
-- **Operating System**: Windows 10/11, Linux, or macOS
-- **Compiler**: Visual Studio 2022 (MSVC with C++20), GCC 11+, or Clang 13+
-- **CMake**: Version 3.20 or newer
-- **Qt**: Qt 6.x installed with Widgets, Network, and Sql modules
-- **MongoDB**: Community Server installed locally and listening on port `27017`
-- **vcpkg**: Installed for C++ backend dependency resolution
+### Option 1: One-Click Startup (Recommended)
+1. **Launch the Drogon Backend**:
+   - Double-click [`start_backend.bat`](file:///start_backend.bat) (or run `.\start_backend.bat` in PowerShell / terminal).
+   - Connects directly to MongoDB and starts listening at `http://127.0.0.1:8080`.
+2. **Launch the Qt Desktop Frontend**:
+   - Open Qt Creator ➡️ Open `frontend/CMakeLists.txt` ➡️ Press `Ctrl + R`.
+   - Alternatively, run from terminal:
+     ```cmd
+     set PATH=C:\Qt\6.12.0\msvc2022_64\bin;%PATH%
+     .\frontend\build\Desktop_Qt_6_12_0_MSVC2022_64bit_Debug\BookBazzar.exe
+     ```
 
----
+### Troubleshooting
 
-### Step 1: Start MongoDB
-Ensure MongoDB is running on `127.0.0.1:27017`. If using local storage within this repository:
-```powershell
-& "C:\Program Files\MongoDB\Server\8.3\bin\mongod.exe" --dbpath "mongodb_data" --bind_ip 127.0.0.1 --port 27017
-```
-
----
-
-### Step 2: Build & Start the Backend Server
-
-```powershell
-# Navigate to backend directory
-cd backend
-
-# Build with CMake & vcpkg
-cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=C:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake
-cmake --build build --config Debug
-
-# Start the server (uses start_server.ps1 helper)
-.\start_server.ps1
-```
-The REST API server will begin listening on **`http://127.0.0.1:8080`**.
+| Issue | Cause | Solution |
+| :--- | :--- | :--- |
+| **"Address already in use (8080)"** | A previous instance of the backend is still running. | Run `Stop-Process -Name BookExchangeBackend -Force` in PowerShell. |
+| **"Cannot open config.json"** | Working directory is not `backend/`. | Launch via `start_backend.bat` or `cd backend` first. |
+| **"Failed to connect to MongoDB Atlas"** | DNS SRV resolution or outbound port 27017 blocked. | Run `.\backend\tests\test_atlas_connection.ps1` to test connectivity. |
+| **"Network Error in Qt GUI"** | Backend server is not running on port 8080. | Launch `start_backend.bat` before performing actions in the GUI. |
 
 ---
 
-### Step 3: Build & Launch the Qt Desktop Frontend
-
-Open the `frontend/` directory in **Qt Creator** or build via terminal:
-
-```powershell
-# Navigate to frontend directory
-cd frontend
-
-# Configure and compile
-cmake -B build -S .
-cmake --build build --config Debug
-
-# Run BookBazzar
-.\build\Debug\BookBazzar.exe
-```
-
----
-
-## 6. REST API Overview
+## 📡 REST API Specifications
 
 All protected endpoints require an `Authorization: Bearer <jwt>` HTTP header.
 
 | Method | Route | Auth | Description |
 | :--- | :--- | :---: | :--- |
-| `POST` | `/api/auth/register` | None | Register a new user account |
-| `POST` | `/api/auth/login` | None | Authenticate credentials and receive JWT |
+| `POST` | `/api/auth/signup` | Public | Register new user account with Argon2id password hash |
+| `POST` | `/api/auth/login` | Public | Authenticate credentials; return JWT and HttpOnly refresh cookie |
+| `POST` | `/api/auth/refresh`| Cookie | Rotate refresh token and issue fresh access token |
+| `POST` | `/api/auth/logout` | Bearer | Invalidate active session and revoke refresh cookie |
 | `GET` | `/api/auth/me` | Bearer | Retrieve authenticated user profile |
-| `GET` | `/api/books` | None | Search & browse available listings (paginated) |
-| `GET` | `/api/books/:id` | None | Get comprehensive book details & reviews summary |
-| `POST` | `/api/books` | Bearer | Create a new physical book listing |
-| `PUT` | `/api/books/:id` | Bearer | Update an owned book listing |
-| `DELETE` | `/api/books/:id` | Bearer | Delist / remove an owned book |
-| `GET` | `/api/cart` | Bearer | Fetch persistent cart & check for stale items |
+| `GET` | `/api/books` | Public | Browse & search available listings (supports `search`, `category`, `condition`, `minPrice`, `maxPrice`, `sort`, `page`, `limit`) |
+| `GET` | `/api/books/:id` | Public | Comprehensive book details with aggregate rating and review count |
+| `GET` | `/api/books/my` | Bearer | Retrieve seller's owned inventory (including sold/historical) |
+| `POST` | `/api/books` | Bearer | Create a new physical book listing with cover and video URLs |
+| `PUT` | `/api/books/:id` | Bearer | Update an owned book listing (title, price, condition) |
+| `DELETE` | `/api/books/:id` | Bearer | Soft-delete / delist owned book listing |
+| `POST` | `/api/upload` | Public/Bearer | Multipart form upload to Cloudinary CDN (`file` field). Returns `{ success: true, url, public_id }` |
+| `GET` | `/api/cart` | Bearer | Fetch persistent cart & verify single-copy availability |
 | `POST` | `/api/cart/items` | Bearer | Add book to cart (single-copy quantity guaranteed) |
-| `DELETE` | `/api/cart/items/:id` | Bearer | Evict item from cart |
-| `POST` | `/api/checkout` | Bearer | Atomic checkout, inventory lock & demo payment |
+| `DELETE` | `/api/cart/items/:id`| Bearer | Evict item from cart |
+| `POST` | `/api/checkout` | Bearer | Atomic checkout, inventory lock & demo payment simulation |
 | `GET` | `/api/orders` | Bearer | List buyer orders & seller fulfillment history |
 | `GET` | `/api/orders/:id` | Bearer | Get full order lifecycle, tracking and item details |
 | `PATCH` | `/api/orders/:id/status`| Bearer | Advance delivery status (seller only) |
 | `POST` | `/api/orders/:id/cancel`| Bearer | Pre-shipping order cancellation & inventory refund |
-| `POST` | `/api/orders/:id/return`| Bearer | Request post-delivery item return |
+| `POST` | `/api/orders/:id/return`| Bearer | Request post-delivery item return with structured reason |
+| `POST` | `/api/orders/:id/return/process`| Bearer | Seller approval or rejection of return request |
 | `POST` | `/api/exchanges` | Bearer | Propose barter exchange (offering owned book for requested book) |
 | `GET` | `/api/exchanges/sent` | Bearer | View sent barter proposals |
 | `GET` | `/api/exchanges/received`| Bearer | View received barter proposals |
 | `POST` | `/api/exchanges/:id/accept`| Bearer | Accept exchange & trigger atomic two-sided ownership swap |
-| `POST` | `/api/reviews` | Bearer | Submit rating and review for delivered book |
-| `GET` | `/api/reviews/book/:id` | None | View public verified reviews for a book |
+| `POST` | `/api/exchanges/:id/reject`| Bearer | Reject barter proposal (receiver only) |
+| `POST` | `/api/exchanges/:id/cancel`| Bearer | Cancel pending barter proposal (requester only) |
+| `POST` | `/api/reviews` | Bearer | Submit review for verified DELIVERED purchase (`{ orderId, bookId, rating, comment }`) |
+| `GET` | `/api/books/:id/reviews` | Public | View public verified reviews for a book (order ID scrubbed) |
+| `GET` | `/api/reviews/my` | Bearer | View reviews written by authenticated user |
+| `PUT` | `/api/reviews/:id` | Bearer | Edit rating or comment of own review |
+| `DELETE` | `/api/reviews/:id` | Bearer | Delete own review and update book aggregate rating |
 
 For complete backend schema details, view the [Backend README](backend/README.md).
 
 ---
 
-## 7. Quality Assurance & Automated Testing
+## 🧪 Automated Testing & QA Verification
 
-### Backend Integration Test Suite (91 Tests)
-A full-spectrum automated integration and fuzzing suite tests every backend endpoint against concurrency, IDOR, input validation, and boundary conditions:
+### Backend Automated Test Suite (94 Tests — 100% Pass Rate)
+A full-spectrum integration, security, concurrency, and fuzzing suite testing every endpoint against edge cases:
 ```powershell
 powershell -ExecutionPolicy Bypass -File backend/tests/test_qa_suite.ps1
 ```
 
-### Frontend Unit & Contract Test Suite (28 Tests)
-Built on `Qt6::Test` to validate domain models, JSON deserialization, session lifecycle, and client-side form validation:
+```text
+================================================================
+QA & INTEGRATION TEST RUN COMPLETE
+Total Tests:  94
+Passed Tests: 94
+Failed Tests: 0
+================================================================
+```
+
+### Cloud Integration Verification Scripts
 ```powershell
-cd frontend/build
-ctest --output-on-failure
+# Verify MongoDB Atlas DNS SRV resolution & TCP connectivity
+powershell -ExecutionPolicy Bypass -File backend/tests/test_atlas_connection.ps1
+
+# Verify Cloudinary signed media upload & CDN delivery
+powershell -ExecutionPolicy Bypass -File backend/tests/test_cloudinary_upload.ps1
+```
+
+### Frontend Unit & GUI Smoke Tests (29 Tests — 100% Pass Rate)
+Automated testing powered by **Qt Test (QTest)**:
+```cmd
+# Run Unit Tests (DataModels, SessionManager, Validation, ApiClient)
+.\frontend\build\Desktop_Qt_6_12_0_MSVC2022_64bit_Debug\BookBazzarTests.exe
+
+# Run GUI Smoke Test (Verifies all 12 windows render cleanly)
+.\frontend\build\Desktop_Qt_6_12_0_MSVC2022_64bit_Debug\BookBazzarGuiSmokeTest.exe
 ```
 
 ---
 
-## 8. Documentation
+## 🚀 Future Implementations Roadmap
 
-- [Backend Documentation & API Architecture](backend/README.md)
-- [Frontend Documentation & Navigation Flow](frontend/README.md)
+For commercial production deployment, scaling to thousands of concurrent users, and real-world compliance, an exhaustive technical roadmap is detailed in:  
+👉 **[`future.md`](future.md)**
+
+Key strategic roadmap milestones:
+1. **Real Payment Gateways & Escrow Subsystem**: Razorpay / Stripe webhook processing with escrow payout protection.
+2. **Third-Party Logistics (3PL)**: Automated AWB generation and live tracking webhooks via Shiprocket / Delhivery.
+3. **Real-Time WebSockets**: Instant notifications for order status milestones and barter proposals.
+4. **Peer-to-Peer Secure In-App Chat**: Contextual messaging for barter negotiation and condition inquiries.
+5. **Computer Vision & ISBN Barcode Scanning**: Instant book metadata extraction via device camera and OpenLibrary API.
+6. **Campus & Hyperlocal Meetup Zones**: Zero-cost peer book handover with cryptographic proximity QR verification.
+7. **Cross-Platform Mobile Client**: Flutter / React Native mobile applications consuming the Drogon REST API.
+8. **Production Infrastructure & Observability**: Multi-stage Docker containers, Kubernetes Helm charts, Redis session caching, Prometheus metrics, and Grafana dashboards.
 
 ---
 
-## 9. License
+## 📄 Documentation Links
+
+- 📘 [Backend API Architecture & Implementation Guide](backend/README.md)
+- 🖥️ [Frontend Qt6 Desktop Client Guide](frontend/README.md)
+- 🚀 [Production Scaling & Future Roadmap (`future.md`)](future.md)
+
+---
+
+## 📜 License
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.

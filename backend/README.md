@@ -44,9 +44,12 @@ backend/
 │   ├── services/               # Business logic & transaction orchestration
 │   └── controllers/            # Drogon HTTP REST controllers
 ├── src/                        # Implementations matching include/
+│   ├── controllers/UploadController.cpp # Cloudinary multipart media upload implementation
 │   └── main.cpp                # Application entrypoint & graceful signal handler
-└── tests/                      # PowerShell integration test suites & Postman collection
-    ├── test_qa_suite.ps1        # Master QA suite (91 tests)
+└── tests/                      # Automated PowerShell integration test suites & Postman collection
+    ├── test_qa_suite.ps1        # Master QA suite (94 tests, 100% pass rate)
+    ├── test_atlas_connection.ps1# MongoDB Atlas DNS SRV & TCP connectivity verification
+    ├── test_cloudinary_upload.ps1 # Cloudinary media upload & CDN delivery verification
     ├── test_marketplace.ps1     # Phase 1 — Book marketplace (16 tests)
     ├── test_buy_sell.ps1        # Phase 2 — Cart, checkout & payment (23 tests)
     ├── test_exchange.ps1        # Phase 3 — Peer-to-peer exchange (24 tests)
@@ -142,6 +145,12 @@ backend/
 - **Duplicate Prevention**: Compound unique index `{ orderId: 1, bookId: 1 }` guarantees only one review per qualifying purchase.
 - **Ratings & Aggregates**: Ratings validated from 1 to 5; book average rating and review counts are recalculated automatically on create, edit, or delete.
 - **Public Privacy**: Public review listings display username, rating, comment, and timestamp without exposing order IDs or payment details.
+
+### 5.9 Media Upload & Cloudinary CDN (`/api/upload`)
+- **Multipart Form Upload**: Accepts multipart/form-data payloads with raw file bytes (images: JPEG, PNG, WEBP, GIF; condition videos: MP4, MOV, WEBM).
+- **Signed Cloudinary Upload**: Computes SHA-1 cryptographic signatures (`timestamp=... + apiSecret`) ensuring secure server-to-server asset creation.
+- **Dual Engine Pipeline**: Utilizes Drogon's asynchronous `HttpClient` with automatic fallback to native curl subprocess for high network resilience across Windows TLS configurations.
+- **Immediate CDN URLs**: Returns `{ "success": true, "url": "https://res.cloudinary.com/.../image/upload/...", "public_id": "..." }` for direct persistence in book listings.
 
 ---
 
@@ -249,15 +258,29 @@ All responses return standard JSON envelopes:
 | `PUT` | `/api/reviews/:id` | Bearer | Edit rating or comment of own review |
 | `DELETE` | `/api/reviews/:id` | Bearer | Delete own review and update book aggregate rating |
 
+### Media Upload APIs (`/api/upload`)
+| Method | Endpoint | Auth | Description |
+| :--- | :--- | :---: | :--- |
+| `POST` | `/api/upload` | Public/Bearer | Multipart file upload to Cloudinary CDN (`file` field). Returns `{ success: true, url, public_id }` |
+
 ---
 
 ## 8. Environment Variables
 
+Configuration is loaded from `backend/.env` or system environment variables:
+
 | Variable | Default Value | Description |
 | :--- | :--- | :--- |
-| `JWT_SECRET` | *(Required)* | High-entropy secret key for HS256 JWT signature verification |
-| `MONGO_URI` | `mongodb://127.0.0.1:27017` | MongoDB connection URI |
-| `MONGO_DATABASE` | `book_exchange` | Target MongoDB database name |
+| `JWT_SECRET` | *(Required)* | High-entropy secret key (≥32 chars) for HS256 JWT signature verification |
+| `JWT_ISSUER` | `myapp-api` | Token issuer claim identifier |
+| `MONGO_URI` | `mongodb://127.0.0.1:27017` | MongoDB connection URI (supports `mongodb+srv://` Atlas clusters) |
+| `MONGO_DATABASE` | `myapp` | Target MongoDB database name |
+| `ACCESS_TOKEN_LIFETIME` | `900` | Access token lifespan in seconds (15 minutes) |
+| `REFRESH_TOKEN_LIFETIME` | `2592000` | Refresh token lifespan in seconds (30 days) |
+| `SECURE_COOKIES` | `false` | Sets `Secure` flag on refresh token HTTP-only cookies (enable for HTTPS) |
+| `CLOUDINARY_CLOUD_NAME` | *(Optional)* | Cloudinary cloud identifier for media uploads |
+| `CLOUDINARY_API_KEY` | *(Optional)* | Cloudinary API Key for signed REST uploads |
+| `CLOUDINARY_API_SECRET` | *(Optional)* | Cloudinary API Secret for SHA-1 upload signatures |
 | `PORT` | `8080` | HTTP listener port (configured in `config.json`) |
 
 ---
@@ -299,14 +322,16 @@ The automated test suites are located in `backend/tests/`:
 
 | Suite | Script | Tests | Description |
 | :--- | :--- | :---: | :--- |
-| **Master QA Suite** | `tests/test_qa_suite.ps1` | **91** | Complete end-to-end integration, security, fuzzing, and boundary test suite |
+| **Master QA Suite** | `tests/test_qa_suite.ps1` | **94** | Complete end-to-end integration, security, fuzzing, upload, and boundary test suite |
 | **Marketplace Slice** | `tests/test_marketplace.ps1` | **16** | Phase 1 listing CRUD, browse, multi-criteria search, pagination, and ownership |
 | **Buy/Sell Slice** | `tests/test_buy_sell.ps1` | **23** | Phase 2 cart, stale cart detection, checkout, demo payment, and concurrency |
 | **Exchange Slice** | `tests/test_exchange.ps1` | **24** | Phase 3 peer-to-peer book exchange, atomic swap, and cross-slice conflict |
 | **Product Hardening**| `tests/test_phase4.ps1` | **24** | Phase 4 reviews, rating calculation, order cancellation, and return workflow |
+| **Atlas Cloud Check**| `tests/test_atlas_connection.ps1` | Verification | Automated DNS SRV resolution and TCP 27017 Atlas cluster verification |
+| **Cloudinary Check** | `tests/test_cloudinary_upload.ps1` | Verification | Signed multipart upload and HTTP 200 CDN image delivery verification |
 
 ```powershell
-# Run the Master QA Suite against a running server:
+# Run the Master QA Suite against a running server (All 94 tests):
 powershell -ExecutionPolicy Bypass -File tests/test_qa_suite.ps1
 
 # Run individual vertical slice regressions:
@@ -314,9 +339,13 @@ powershell -ExecutionPolicy Bypass -File tests/test_marketplace.ps1
 powershell -ExecutionPolicy Bypass -File tests/test_buy_sell.ps1
 powershell -ExecutionPolicy Bypass -File tests/test_exchange.ps1
 powershell -ExecutionPolicy Bypass -File tests/test_phase4.ps1
+
+# Verify cloud integrations:
+powershell -ExecutionPolicy Bypass -File tests/test_atlas_connection.ps1
+powershell -ExecutionPolicy Bypass -File tests/test_cloudinary_upload.ps1
 ```
 
-### Test Categories & Coverage
+### Test Categories & Coverage (94 Tests Total)
 1. **Authentication & Session Management (16 tests)**:
    - Signup, duplicate username/email rejection, password boundary checks (8-char minimum), Argon2id verification.
    - Login, invalid password, non-existent user handling.
@@ -365,28 +394,10 @@ powershell -ExecutionPolicy Bypass -File tests/test_phase4.ps1
    - IDOR verification across all private resources (listings, carts, orders, exchanges, reviews).
    - Fuzzing with malformed JSON, empty bodies, type confusion, oversized strings (10,000+ chars), and SQL/Mongo injection patterns.
    - Zero sensitive information leakage: Error responses never expose C++ stack traces, internal MongoDB drivers, password hashes, or JWT secrets.
-
-### Concurrency Testing Results
-- **Double Purchase Race Condition**: Two asynchronous checkout requests executing concurrently against a single physical book were tested. In 100% of test runs, MongoDB's atomic conditional update (`acquireForPurchase`: matching `{ _id: bookId, status: "available" }` with atomic `$set: { status: "sold" }`) guaranteed exactly **one** successful purchase. The losing thread received HTTP `409 Conflict`, and no duplicate orders or corrupted states occurred.
-- **Cross-Slice Conflict (Purchase vs. Exchange)**: Verified that when Book A is in a pending exchange while simultaneously being purchased, the purchase locks the book to `sold`, causing subsequent exchange acceptance to abort with `409 Conflict`.
-
-### Security Testing Results
-- **Authentication**: Dual-token architecture tested. Malformed tokens, invalid signatures, expired tokens, and revoked refresh tokens are rejected with `401 Unauthorized`.
-- **Authorization & IDOR**: Tested cross-user access on listings, carts, orders, exchanges, and reviews. Every endpoint properly enforces owner/participant verification and returns `403 Forbidden`.
-- **Data Privacy**: Inspected all public endpoints (`GET /api/books`, `GET /api/books/:id`, `GET /api/books/:id/reviews`). Neither user password hashes, email addresses, refresh tokens, nor internal server secrets are leaked.
-- **Input Sanitization**: Drogon and JsonCpp safely parse edge cases; invalid or malformed payloads return `400 Bad Request` without server crashes.
-
-### Defects Discovered & Resolved During QA
-| Defect | Severity | Root Cause | Resolution |
-| :--- | :---: | :--- | :--- |
-| **Cart Quantity Boundary** | Medium | `POST /api/cart/items` allowed payload specifying arbitrary `quantity` (e.g. 2, 0, -1). | Added check in `CartController.cpp` ensuring `quantity == 1` for physical book listings; non-1 values reject with `400 Bad Request`. |
-| **Delivery Status Backwards Regression** | Medium | `PATCH /api/orders/:id/status` allowed invalid status regressions (e.g. `DELIVERED` back to `PLACED`). | Added `isTransitionValid` lifecycle state-machine validation in `OrderService.cpp` to enforce forward-only transitions. |
-
-### Known Limitations & Demo Boundaries
-1. **Simulated Payment Gateway**: Payments are processed using simulated latency and generated IDs (`DEMO_TXN_*`). Real monetary transactions would require integrating an external payment aggregator (Stripe, Razorpay) with webhook validation.
-2. **Simulated Logistics**: Shipping tracking numbers (`DEMO_TRACK_*`) are generated internally. Real courier integration would require dispatch webhooks.
-3. **Stand-Alone MongoDB vs. Replica Set**: Atomic operations are achieved via atomic conditional updates and application-level compensation rollbacks. Full multi-document ACID transactions require MongoDB configured with replica sets.
-4. **Code Coverage Note**: While 91 end-to-end integration tests cover all positive and negative API pathways, formal line-by-line statement coverage was not instrumented with gcov/lcov.
+10. **Media Upload & CDN Verification (3 tests)**:
+    - Empty request body to `/api/upload` returns `400 Bad Request`.
+    - Non-multipart payload returns `400 Bad Request`.
+    - Multipart image upload handled gracefully with signed Cloudinary integration or clean error response.
 
 ---
 
@@ -405,13 +416,12 @@ powershell -ExecutionPolicy Bypass -File tests/test_phase4.ps1
 - [x] Pre-shipping order cancellation with automatic inventory availability restoration.
 - [x] PBL-level return request and approval/rejection workflow with conservative `returned` delisting.
 - [x] Private buyer and seller transaction histories.
+- [x] **Cloudinary CDN Media Uploads**: Multipart form handling via `/api/upload` with signed REST upload and native curl fallback.
+- [x] **MongoDB Atlas Cloud Integration**: Seamless connectivity to cloud-hosted clusters with DNS SRV resolution.
 
 ---
 
-## 12. Known Limitations & Future Improvements
+## 12. Future Implementations & Roadmap
 
-1. **Simulated Payment Gateway**: Real monetary transactions through payment aggregators (Stripe, Razorpay, Cashfree) require webhook handling and signature verification.
-2. **Simulated Courier Logistics**: Tracking IDs are demo generated; real courier APIs (Shiprocket, Delhivery) would introduce real-time webhooks.
-3. **MongoDB Standalone vs. Replica Set Transactions**: Atomic two-sided exchange uses conditional updates with automated compensation rollback. In production replica sets, native multi-document transactions (`client_session`) can be activated.
-4. **Cloud Object Storage**: Book cover images are currently accepted as URLs; multipart binary file uploads to S3/GCS can be added.
-5. **Real-Time WebSockets**: Notifications for received exchange requests or order updates currently rely on REST polling.
+For an in-depth architectural analysis and implementation plan for commercial production scaling (Real Payment Gateways via Razorpay/Stripe, 3PL Courier Logistics via Shiprocket/Delhivery, WebSockets, End-to-End Chat, AI ISBN barcode scanning, and Docker/K8s deployment), refer to the root project roadmap:
+👉 **[`future.md`](../future.md)**
