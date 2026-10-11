@@ -180,11 +180,17 @@ void BookController::createListing(
   }
 
   try {
+    LOG_INFO << "[BookController] [MONGODB ATLAS] User " << userId
+             << " creating listing: \"" << book.title << "\" by " << book.author
+             << " (" << book.images.size() << " photos, cover: " << book.coverImage << ")";
+
     BookRepository books;
     UserRepository users;
     BookService service(books, users);
 
     const auto created = service.createListing(userId, std::move(book));
+
+    LOG_INFO << "[BookController] [MONGODB ATLAS] [SUCCESS] Book persisted to database with ID: " << created.id;
 
     Json::Value body;
     body["success"] = true;
@@ -195,9 +201,10 @@ void BookController::createListing(
     response->setStatusCode(k201Created);
     callback(response);
   } catch (const std::invalid_argument &e) {
+    LOG_WARN << "[BookController] [MONGODB ATLAS] Invalid input: " << e.what();
     callback(jsonError(k400BadRequest, e.what()));
   } catch (const std::exception &e) {
-    LOG_ERROR << "Create listing failed: " << e.what();
+    LOG_ERROR << "[BookController] [MONGODB ATLAS] [FAILED] Create listing exception: " << e.what();
     callback(jsonError(k500InternalServerError, "Internal server error"));
   }
 }

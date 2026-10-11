@@ -13,6 +13,13 @@ class QFrame;
 class QVBoxLayout;
 class QHBoxLayout;
 class QTextEdit;
+class QStackedWidget;
+class VideoPlayerWidget;
+
+struct GalleryMediaItem {
+    bool isVideo{false};
+    QString url;
+};
 
 class BookDetailsWindow : public QWidget
 {
@@ -32,15 +39,19 @@ public:
 
 protected:
     bool eventFilter(QObject *obj, QEvent *event) override;
-
+    void resizeEvent(QResizeEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
 
 signals:
     void backRequested();
     void orderPlaced();
     void addToCartRequested(const QString &bookId);
+    void exchangeRequested(const QString &bookId);
 
 public slots:
     void handleProposeExchange();
+    void showPreviousMedia();
+    void showNextMedia();
 
 private slots:
     void handleOrder();
@@ -49,14 +60,17 @@ private slots:
     void handlePlayVideo();
     void handleSetRating(int stars);
     void handleSubmitReview();
+    void openImageInspection();
 
 private:
     void setupUI();
+    void setupShortcuts();
     QWidget* createTopBar();
     QWidget* createDetailsSection();
     QWidget* createReviewsSection();
     QFrame* createInfoCard(const QString &label, const QString &value);
     void updateGalleryUI();
+    void updatePreviewOverlayPositions();
     void checkBuyerStatus();
     void renderReviewsList(const QVector<ReviewModel> &sellerReviews, double sellerAvgRating, int sellerReviewCount);
 
@@ -69,21 +83,32 @@ private:
     // Gallery state
     int currentMediaIndex_{0};
     QString currentVideoUrl_;
-    QLabel *coverLabel;
-    QPushButton *playVideoBtn;
-    QHBoxLayout *thumbnailsLayout;
+    QVector<GalleryMediaItem> mediaItems_;
+
+    QFrame *previewBox_{nullptr};
+    QStackedWidget *mediaStack_{nullptr};
+    QLabel *coverLabel{nullptr};
+    VideoPlayerWidget *videoPlayer_{nullptr};
+    QPushButton *prevMediaBtn_{nullptr};
+    QPushButton *nextMediaBtn_{nullptr};
+    QPushButton *inspectBtn_{nullptr};
+    QLabel *mediaCounterBadge_{nullptr};
+
+    QPushButton *playVideoBtn{nullptr};
+    QScrollArea *thumbScroll_{nullptr};
+    QHBoxLayout *thumbnailsLayout{nullptr};
     QVector<QPushButton*> thumbnailBtns;
 
     // Book Info
-    QLabel *titleLabel;
-    QLabel *authorLabel;
-    QLabel *priceLabel;
-    QLabel *conditionLabel;
-    QLabel *categoryLabel;
-    QLabel *isbnLabel;
-    QLabel *sellerLabel;
-    QLabel *ratingLabel;
-    QLabel *descriptionLabel;
+    QLabel *titleLabel{nullptr};
+    QLabel *authorLabel{nullptr};
+    QLabel *priceLabel{nullptr};
+    QLabel *conditionLabel{nullptr};
+    QLabel *categoryLabel{nullptr};
+    QLabel *isbnLabel{nullptr};
+    QLabel *sellerLabel{nullptr};
+    QLabel *ratingLabel{nullptr};
+    QLabel *descriptionLabel{nullptr};
 
     // Reviews & Buyer check
     bool hasPurchased_{false};
@@ -95,12 +120,12 @@ private:
     QVector<QPushButton*> starButtons_;
     QTextEdit *reviewCommentEdit_{nullptr};
     QPushButton *submitReviewBtn_{nullptr};
-    QVBoxLayout *reviewsLayout;
+    QVBoxLayout *reviewsLayout{nullptr};
 
     // Action buttons
-    QPushButton *orderButton;
-    QPushButton *exchangeButton;
-    QPushButton *backButton;
+    QPushButton *orderButton{nullptr};
+    QPushButton *exchangeButton{nullptr};
+    QPushButton *backButton{nullptr};
 };
 
 #endif // BOOKDETAILSWINDOW_H

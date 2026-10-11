@@ -64,6 +64,13 @@ ExchangeRequest ExchangeService::createRequest(
     throw std::runtime_error("REQUESTER_NOT_FOUND");
   }
 
+  Pagination userBooksPagination{1, 1};
+  auto userBooks = books_.findByOwner(requesterId, std::optional<std::string>("available"), userBooksPagination);
+  if (userBooks.total == 0) {
+    throw std::invalid_argument(
+        "You must have at least one active listed book to propose an exchange");
+  }
+
   auto requestedBook = books_.findById(requestedBookId);
   if (!requestedBook) {
     throw std::runtime_error("REQUESTED_BOOK_NOT_FOUND");

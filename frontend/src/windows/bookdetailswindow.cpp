@@ -1,18 +1,31 @@
 #include "bookdetailswindow.h"
+#include "windows/ImageInspectionDialog.h"
 #include "network/ApiClient.h"
 #include "auth/SessionManager.h"
 #include "AppStyle.h"
 #include "StyledMessageBox.h"
 #include "ImageLoader.h"
+#include "VideoPlayerWidget.h"
+#include "VideoThumbnailHelper.h"
+#include "ProposeExchangeDialog.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QUrlQuery>
 #include <QGridLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QTextEdit>
 #include <QScrollArea>
 #include <QFrame>
+#include <QStackedWidget>
+#include <QShortcut>
+#include <QKeyEvent>
+#include <QResizeEvent>
+#include <QApplication>
+#include <QLineEdit>
+#include <QPlainTextEdit>
+#include <QComboBox>
 #include <QNetworkReply>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -30,7 +43,13 @@ BookDetailsWindow::BookDetailsWindow(const QString &bookId,
     : QWidget(parent),
       bookId(bookId),
       userName(userName),
+      previewBox_(nullptr),
+      mediaStack_(nullptr),
       coverLabel(nullptr),
+      videoPlayer_(nullptr),
+      prevMediaBtn_(nullptr),
+      nextMediaBtn_(nullptr),
+      mediaCounterBadge_(nullptr),
       playVideoBtn(nullptr),
       thumbnailsLayout(nullptr),
       titleLabel(nullptr),
@@ -55,8 +74,10 @@ BookDetailsWindow::BookDetailsWindow(const QString &bookId,
     resize(1200, 860);
     setMinimumSize(980, 680);
     setStyleSheet(QString("background-color: %1;").arg(AppStyle::Background));
+    setFocusPolicy(Qt::StrongFocus);
 
     setupUI();
+    setupShortcuts();
     loadBook();
     loadReviews();
     checkBuyerStatus();
@@ -64,6 +85,9 @@ BookDetailsWindow::BookDetailsWindow(const QString &bookId,
 
 BookDetailsWindow::~BookDetailsWindow()
 {
+    if (qApp) {
+        qApp->removeEventFilter(this);
+    }
 }
 
 void BookDetailsWindow::setupUI()
@@ -79,6 +103,7 @@ void BookDetailsWindow::setupUI()
     scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setFocusPolicy(Qt::NoFocus);
     scrollArea->setStyleSheet(QString(R"(
         QScrollArea {
             background-color: %1;
@@ -150,58 +175,160 @@ QWidget* BookDetailsWindow::createDetailsSection()
     leftLayout->setSpacing(12);
 
     // Main Media Preview Box
-    QFrame *previewBox = new QFrame(leftCard);
-    previewBox->setFixedHeight(320);
-    previewBox->setStyleSheet(QString(R"(
+    previewBox_ = new QFrame(leftCard);
+    previewBox_->setFixedSize(320, 330);
+    previewBox_->setStyleSheet(R"(
         QFrame {
-            background-color: %1;
-            border: 1px solid %2;
+            background-color: #0F172A;
+            border: 1px solid #334155;
             border-radius: 12px;
         }
-    )").arg(AppStyle::SurfaceSubtle, AppStyle::BorderSubtle));
+    )");
 
-    QVBoxLayout *previewLayout = new QVBoxLayout(previewBox);
-    previewLayout->setContentsMargins(8, 8, 8, 8);
-    previewLayout->setSpacing(8);
+    QVBoxLayout *previewLayout = new QVBoxLayout(previewBox_);
+    previewLayout->setContentsMargins(0, 0, 0, 0);
+    previewLayout->setSpacing(0);
 
-    coverLabel = new QLabel(previewBox);
+    mediaStack_ = new QStackedWidget(previewBox_);
+    mediaStack_->setStyleSheet("background-color: #0F172A; border-radius: 12px; border: none;");
+
+    // Page 0: Image Cover / Photo preview
+    coverLabel = new QLabel(mediaStack_);
     coverLabel->setAlignment(Qt::AlignCenter);
-    coverLabel->setStyleSheet("background: transparent; border: none;");
+    coverLabel->setStyleSheet("background-color: #0F172A; border-radius: 12px; border: none;");
+    coverLabel->setAttribute(Qt::WA_OpaquePaintEvent, true);
+    coverLabel->setCursor(Qt::PointingHandCursor);
+    coverLabel->setToolTip("Click to view full size");
     coverLabel->installEventFilter(this);
-    previewLayout->addWidget(coverLabel, 1);
+    mediaStack_->addWidget(coverLabel);
 
+    // Page 1: Native Embedded Video Player
+    videoPlayer_ = new VideoPlayerWidget(mediaStack_);
+    mediaStack_->addWidget(videoPlayer_);
 
-    playVideoBtn = new QPushButton("▶ Play Video Preview", previewBox);
-    playVideoBtn->setCursor(Qt::PointingHandCursor);
-    playVideoBtn->setStyleSheet(AppStyle::dangerButtonStyle());
-    playVideoBtn->setFixedHeight(36);
+    previewLayout->addWidget(mediaStack_, 1);
+
+    // Legacy play button kept hidden for compatibility
+    playVideoBtn = new QPushButton("▶ Play Video Preview", previewBox_);
     playVideoBtn->setVisible(false);
-    connect(playVideoBtn, &QPushButton::clicked, this, &BookDetailsWindow::handlePlayVideo);
-    previewLayout->addWidget(playVideoBtn);
 
-    leftLayout->addWidget(previewBox);
+    // Overlay Elements: Floating < and > Carousel Controls & Counter Badge
+    prevMediaBtn_ = new QPushButton("❮", previewBox_);
+    prevMediaBtn_->setFixedSize(38, 38);
+    prevMediaBtn_->setFocusPolicy(Qt::NoFocus);
+    prevMediaBtn_->setCursor(Qt::PointingHandCursor);
+    prevMediaBtn_->setToolTip("Previous Media (Shortcut: Left Arrow, A, or <)");
+    prevMediaBtn_->setStyleSheet(R"(
+        QPushButton {
+            background-color: #1E293B;
+            color: #FFFFFF;
+            border: 1.5px solid #475569;
+            border-radius: 19px;
+            font-size: 15px;
+            font-weight: 800;
+            padding-bottom: 2px;
+        }
+        QPushButton:hover {
+            background-color: #4F46E5;
+            border-color: #818CF8;
+        }
+        QPushButton:pressed {
+            background-color: #3730A3;
+        }
+    )");
+    connect(prevMediaBtn_, &QPushButton::clicked, this, &BookDetailsWindow::showPreviousMedia);
+
+    nextMediaBtn_ = new QPushButton("❯", previewBox_);
+    nextMediaBtn_->setFixedSize(38, 38);
+    nextMediaBtn_->setFocusPolicy(Qt::NoFocus);
+    nextMediaBtn_->setCursor(Qt::PointingHandCursor);
+    nextMediaBtn_->setToolTip("Next Media (Shortcut: Right Arrow, D, or >)");
+    nextMediaBtn_->setStyleSheet(prevMediaBtn_->styleSheet());
+    connect(nextMediaBtn_, &QPushButton::clicked, this, &BookDetailsWindow::showNextMedia);
+
+    mediaCounterBadge_ = new QLabel("1 / 1", previewBox_);
+    mediaCounterBadge_->setStyleSheet(R"(
+        background-color: #1E293B;
+        color: #FFFFFF;
+        border: 1px solid #475569;
+        border-radius: 10px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 700;
+    )");
+
+    inspectBtn_ = new QPushButton("🔍 Inspect Full Size", previewBox_);
+    inspectBtn_->setFocusPolicy(Qt::NoFocus);
+    inspectBtn_->setCursor(Qt::PointingHandCursor);
+    inspectBtn_->setToolTip("Click to view in full screen");
+    inspectBtn_->setStyleSheet(R"(
+        QPushButton {
+            background-color: rgba(15, 23, 42, 0.90);
+            color: #FFFFFF;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            padding: 5px 12px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        QPushButton:hover {
+            background-color: #4F46E5;
+            border-color: #818CF8;
+        }
+        QPushButton:pressed {
+            background-color: #3730A3;
+        }
+    )");
+    connect(inspectBtn_, &QPushButton::clicked, this, &BookDetailsWindow::openImageInspection);
+
+    updatePreviewOverlayPositions();
+
+    leftLayout->addWidget(previewBox_);
 
     // Thumbnails Row
     QLabel *galleryHeading = new QLabel("Media Gallery (Click to inspect):", leftCard);
     galleryHeading->setStyleSheet(QString("color: %1; font-size: 11px; font-weight: 700;").arg(AppStyle::TextMuted));
     leftLayout->addWidget(galleryHeading);
 
-    QScrollArea *thumbScroll = new QScrollArea(leftCard);
-    thumbScroll->setFixedHeight(86);
-    thumbScroll->setWidgetResizable(true);
-    thumbScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    thumbScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    thumbScroll->setFrameShape(QFrame::NoFrame);
-    thumbScroll->setStyleSheet("background: transparent; border: none;");
+    thumbScroll_ = new QScrollArea(leftCard);
+    thumbScroll_->setFixedHeight(90);
+    thumbScroll_->setWidgetResizable(true);
+    thumbScroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    thumbScroll_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    thumbScroll_->setFrameShape(QFrame::NoFrame);
+    thumbScroll_->setFocusPolicy(Qt::NoFocus);
+    thumbScroll_->setStyleSheet(R"(
+        QScrollArea {
+            background: transparent;
+            border: none;
+        }
+        QScrollBar:horizontal {
+            border: none;
+            background: transparent;
+            height: 4px;
+            margin: 0px;
+        }
+        QScrollBar::handle:horizontal {
+            background: #334155;
+            min-width: 20px;
+            border-radius: 2px;
+        }
+        QScrollBar::handle:horizontal:hover {
+            background: #6366F1;
+        }
+        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+            width: 0px;
+        }
+    )");
 
     QWidget *thumbContainer = new QWidget();
     thumbContainer->setStyleSheet("background: transparent;");
     thumbnailsLayout = new QHBoxLayout(thumbContainer);
     thumbnailsLayout->setContentsMargins(0, 0, 0, 0);
     thumbnailsLayout->setSpacing(8);
-    thumbScroll->setWidget(thumbContainer);
+    thumbScroll_->setWidget(thumbContainer);
 
-    leftLayout->addWidget(thumbScroll);
+    leftLayout->addWidget(thumbScroll_);
 
     // Purchase Actions
     orderButton = new QPushButton("Add to Cart", leftCard);
@@ -532,6 +659,144 @@ void BookDetailsWindow::checkBuyerStatus()
     });
 }
 
+void BookDetailsWindow::setupShortcuts()
+{
+    setFocusPolicy(Qt::StrongFocus);
+    if (qApp) {
+        qApp->installEventFilter(this);
+    }
+    if (previewBox_) previewBox_->installEventFilter(this);
+    if (coverLabel) coverLabel->installEventFilter(this);
+
+    auto *leftSc = new QShortcut(QKeySequence(Qt::Key_Left), this, nullptr, nullptr, Qt::WindowShortcut);
+    auto *rightSc = new QShortcut(QKeySequence(Qt::Key_Right), this, nullptr, nullptr, Qt::WindowShortcut);
+    auto *keyASc = new QShortcut(QKeySequence(Qt::Key_A), this, nullptr, nullptr, Qt::WindowShortcut);
+    auto *keyDSc = new QShortcut(QKeySequence(Qt::Key_D), this, nullptr, nullptr, Qt::WindowShortcut);
+    auto *commaSc = new QShortcut(QKeySequence(Qt::Key_Comma), this, nullptr, nullptr, Qt::WindowShortcut);
+    auto *periodSc = new QShortcut(QKeySequence(Qt::Key_Period), this, nullptr, nullptr, Qt::WindowShortcut);
+    auto *spaceSc = new QShortcut(QKeySequence(Qt::Key_Space), this, nullptr, nullptr, Qt::WindowShortcut);
+    auto *escSc = new QShortcut(QKeySequence(Qt::Key_Escape), this, nullptr, nullptr, Qt::WindowShortcut);
+
+    connect(leftSc, &QShortcut::activated, this, &BookDetailsWindow::showPreviousMedia);
+    connect(rightSc, &QShortcut::activated, this, &BookDetailsWindow::showNextMedia);
+    connect(keyASc, &QShortcut::activated, this, &BookDetailsWindow::showPreviousMedia);
+    connect(keyDSc, &QShortcut::activated, this, &BookDetailsWindow::showNextMedia);
+    connect(commaSc, &QShortcut::activated, this, &BookDetailsWindow::showPreviousMedia);
+    connect(periodSc, &QShortcut::activated, this, &BookDetailsWindow::showNextMedia);
+    connect(escSc, &QShortcut::activated, this, &BookDetailsWindow::handleBack);
+    connect(spaceSc, &QShortcut::activated, this, [this]() {
+        if (currentMediaIndex_ >= 0 && currentMediaIndex_ < mediaItems_.size()) {
+            if (mediaItems_[currentMediaIndex_].isVideo && videoPlayer_) {
+                if (videoPlayer_->isPlaying()) videoPlayer_->pause();
+                else videoPlayer_->play();
+            }
+        }
+    });
+}
+
+void BookDetailsWindow::updatePreviewOverlayPositions()
+{
+    if (!previewBox_) return;
+
+    const int w = previewBox_->width();
+    const int h = previewBox_->height();
+
+    if (mediaCounterBadge_) {
+        mediaCounterBadge_->adjustSize();
+        mediaCounterBadge_->move(12, 12);
+        mediaCounterBadge_->raise();
+    }
+    if (prevMediaBtn_) {
+        prevMediaBtn_->move(10, (h - prevMediaBtn_->height()) / 2);
+        prevMediaBtn_->raise();
+    }
+    if (nextMediaBtn_) {
+        nextMediaBtn_->move(w - nextMediaBtn_->width() - 10, (h - nextMediaBtn_->height()) / 2);
+        nextMediaBtn_->raise();
+    }
+    if (inspectBtn_) {
+        inspectBtn_->adjustSize();
+        inspectBtn_->move(w - inspectBtn_->width() - 10, h - inspectBtn_->height() - 10);
+        inspectBtn_->raise();
+    }
+}
+
+void BookDetailsWindow::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    updatePreviewOverlayPositions();
+}
+
+void BookDetailsWindow::keyPressEvent(QKeyEvent *event)
+{
+    QWidget *focused = QApplication::focusWidget();
+    const bool inText = focused && (
+        qobject_cast<QLineEdit*>(focused) ||
+        qobject_cast<QTextEdit*>(focused) ||
+        qobject_cast<QPlainTextEdit*>(focused) ||
+        qobject_cast<QComboBox*>(focused)
+    );
+
+    if (!inText) {
+        const int key = event->key();
+        if (key == Qt::Key_Left || key == Qt::Key_A || key == Qt::Key_Less || key == Qt::Key_Comma) {
+            showPreviousMedia();
+            event->accept();
+            return;
+        }
+        if (key == Qt::Key_Right || key == Qt::Key_D || key == Qt::Key_Greater || key == Qt::Key_Period) {
+            showNextMedia();
+            event->accept();
+            return;
+        }
+        if (key == Qt::Key_Space) {
+            if (currentMediaIndex_ >= 0 && currentMediaIndex_ < mediaItems_.size() &&
+                mediaItems_[currentMediaIndex_].isVideo && videoPlayer_) {
+                if (videoPlayer_->isPlaying()) videoPlayer_->pause();
+                else videoPlayer_->play();
+                event->accept();
+                return;
+            }
+        }
+        if (key == Qt::Key_M) {
+            if (currentMediaIndex_ >= 0 && currentMediaIndex_ < mediaItems_.size() &&
+                mediaItems_[currentMediaIndex_].isVideo && videoPlayer_) {
+                videoPlayer_->onMuteToggled();
+                event->accept();
+                return;
+            }
+        }
+        if (key == Qt::Key_R) {
+            if (currentMediaIndex_ >= 0 && currentMediaIndex_ < mediaItems_.size() &&
+                mediaItems_[currentMediaIndex_].isVideo && videoPlayer_) {
+                videoPlayer_->onReplayClicked();
+                event->accept();
+                return;
+            }
+        }
+        if (key == Qt::Key_Escape || key == Qt::Key_Backspace) {
+            handleBack();
+            event->accept();
+            return;
+        }
+    }
+    QWidget::keyPressEvent(event);
+}
+
+void BookDetailsWindow::showPreviousMedia()
+{
+    if (mediaItems_.isEmpty()) return;
+    const int prev = (currentMediaIndex_ - 1 + mediaItems_.size()) % mediaItems_.size();
+    selectGalleryMedia(prev);
+}
+
+void BookDetailsWindow::showNextMedia()
+{
+    if (mediaItems_.isEmpty()) return;
+    const int next = (currentMediaIndex_ + 1) % mediaItems_.size();
+    selectGalleryMedia(next);
+}
+
 void BookDetailsWindow::updateGalleryUI()
 {
     // Clear existing thumbnails
@@ -541,49 +806,32 @@ void BookDetailsWindow::updateGalleryUI()
         delete item;
     }
     thumbnailBtns.clear();
+    mediaItems_.clear();
+
+    // 1. Build unified media items list: Video first if present, then book images
+    const QString vidUrl = book.videoUrl.trimmed();
+    currentVideoUrl_ = vidUrl;
+    if (!vidUrl.isEmpty()) {
+        mediaItems_.append({true, vidUrl});
+    }
 
     QStringList imageList = book.images;
     if (imageList.isEmpty() && !book.coverImage.isEmpty()) {
         imageList.append(book.coverImage);
     }
-
-    const bool hasVideo = !book.videoUrl.trimmed().isEmpty();
-    currentVideoUrl_ = book.videoUrl.trimmed();
-
-    int btnIndex = 0;
-
-    // Flipkart / Amazon style: Video appears in the STARTING position (index 0) if available
-    if (hasVideo) {
-        QPushButton *vidBtn = new QPushButton();
-        vidBtn->setFixedSize(60, 72);
-        vidBtn->setCursor(Qt::PointingHandCursor);
-        vidBtn->setText("🎬\nVideo");
-        vidBtn->setStyleSheet(QString(R"(
-            QPushButton {
-                background-color: #0F172A;
-                color: #FFFFFF;
-                border: 2px solid %1;
-                border-radius: 8px;
-                font-size: 11px;
-                font-weight: 800;
-                line-height: 1.2;
-            }
-            QPushButton:hover {
-                border-color: %2;
-                background-color: #1E293B;
-            }
-        )").arg(AppStyle::Primary, AppStyle::Primary));
-
-        connect(vidBtn, &QPushButton::clicked, this, [this]() {
-            selectGalleryMedia(-1); // -1 signifies video
-        });
-
-        thumbnailsLayout->addWidget(vidBtn);
-        thumbnailBtns.append(vidBtn);
-        btnIndex++;
+    for (const auto &img : imageList) {
+        if (!img.trimmed().isEmpty()) {
+            mediaItems_.append({false, img.trimmed()});
+        }
     }
 
-    for (int i = 0; i < imageList.size(); ++i) {
+    if (mediaItems_.isEmpty()) {
+        mediaItems_.append({false, QString()});
+    }
+
+    // 2. Build thumbnails strip
+    for (int i = 0; i < mediaItems_.size(); ++i) {
+        const auto &item = mediaItems_[i];
         QPushButton *btn = new QPushButton();
         btn->setFixedSize(56, 72);
         btn->setCursor(Qt::PointingHandCursor);
@@ -598,11 +846,16 @@ void BookDetailsWindow::updateGalleryUI()
             }
         )").arg(AppStyle::BorderSubtle, AppStyle::Primary));
 
-        // Load thumbnail into icon
         QLabel *lbl = new QLabel(btn);
         lbl->setGeometry(2, 2, 52, 68);
         lbl->setAlignment(Qt::AlignCenter);
-        ImageLoader::instance().load(imageList[i], lbl, QSize(52, 68), book.title, book.author);
+        lbl->setStyleSheet("background: transparent; border-radius: 6px;");
+
+        if (item.isVideo) {
+            VideoThumbnailHelper::loadThumbnailAsync(item.url, lbl, QSize(52, 68), book.title, book.coverImage);
+        } else {
+            ImageLoader::instance().load(item.url, lbl, QSize(52, 68), book.title, book.author);
+        }
 
         connect(btn, &QPushButton::clicked, this, [this, i]() {
             selectGalleryMedia(i);
@@ -610,108 +863,170 @@ void BookDetailsWindow::updateGalleryUI()
 
         thumbnailsLayout->addWidget(btn);
         thumbnailBtns.append(btn);
-        btnIndex++;
     }
 
     thumbnailsLayout->addStretch();
-
-    // If video is present, start with video preview at position 0, else first image
-    if (hasVideo) {
-        selectGalleryMedia(-1);
-    } else {
-        selectGalleryMedia(0);
-    }
+    selectGalleryMedia(0);
 }
 
 void BookDetailsWindow::selectGalleryMedia(int index)
 {
-    QStringList imageList = book.images;
-    if (imageList.isEmpty() && !book.coverImage.isEmpty()) {
-        imageList.append(book.coverImage);
-    }
-
-    const bool hasVideo = !currentVideoUrl_.isEmpty();
-    const bool isVideoSelected = (index == -1);
+    if (mediaItems_.isEmpty()) return;
+    if (index < 0) index = 0;
+    if (index >= mediaItems_.size()) index = mediaItems_.size() - 1;
 
     currentMediaIndex_ = index;
+    const auto &item = mediaItems_[index];
 
     // Highlight active thumbnail button
-    int activeBtnIdx = isVideoSelected ? 0 : (hasVideo ? index + 1 : index);
     for (int i = 0; i < thumbnailBtns.size(); ++i) {
-        if (i == activeBtnIdx) {
+        if (i == index) {
             thumbnailBtns[i]->setStyleSheet(QString(R"(
                 QPushButton {
                     background-color: %1;
                     border: 2.5px solid %2;
                     border-radius: 8px;
-                    color: #FFFFFF;
                 }
-            )").arg(i == 0 && hasVideo ? "#0F172A" : "#FFFFFF", AppStyle::Primary));
+            )").arg(item.isVideo ? "#0F172A" : "#FFFFFF", AppStyle::Primary));
         } else {
             thumbnailBtns[i]->setStyleSheet(QString(R"(
                 QPushButton {
                     background-color: %1;
                     border: 1.5px solid %2;
                     border-radius: 8px;
-                    color: %3;
                 }
-            )").arg(i == 0 && hasVideo ? "#1E293B" : "#FFFFFF", AppStyle::BorderSubtle, i == 0 && hasVideo ? "#94A3B8" : AppStyle::TextPrimary));
+            )").arg(item.isVideo ? "#1E293B" : "#FFFFFF", AppStyle::BorderSubtle));
         }
     }
 
-    if (isVideoSelected) {
-        // Video selected: Amazon/Flipkart style playable preview
-        if (playVideoBtn) {
-            playVideoBtn->setVisible(true);
-            playVideoBtn->setText("▶ Play Book Video Preview");
+    if (thumbScroll_ && index >= 0 && index < thumbnailBtns.size()) {
+        thumbScroll_->ensureWidgetVisible(thumbnailBtns[index]);
+    }
+
+    // Update < > buttons and counter badge
+    const bool hasMultiple = mediaItems_.size() > 1;
+    if (prevMediaBtn_) prevMediaBtn_->setVisible(hasMultiple);
+    if (nextMediaBtn_) nextMediaBtn_->setVisible(hasMultiple);
+    if (mediaCounterBadge_) {
+        mediaCounterBadge_->setVisible(hasMultiple);
+        if (item.isVideo) {
+            mediaCounterBadge_->setText(QString("🎬 Video  %1 / %2").arg(index + 1).arg(mediaItems_.size()));
+        } else {
+            mediaCounterBadge_->setText(QString("%1 / %2").arg(index + 1).arg(mediaItems_.size()));
         }
+    }
 
-        QPixmap pix(320, 280);
-        pix.fill(QColor("#0F172A"));
-        QPainter p(&pix);
-        p.setRenderHint(QPainter::Antialiasing);
-
-        // Dark modern background with accent glow
-        QRadialGradient glow(160, 120, 140);
-        glow.setColorAt(0, QColor(79, 70, 229, 80));
-        glow.setColorAt(1, QColor(15, 23, 42, 240));
-        p.fillRect(0, 0, 320, 280, glow);
-
-        // Circular Play Button
-        p.setBrush(QColor(79, 70, 229));
-        p.setPen(Qt::NoPen);
-        p.drawEllipse(QPoint(160, 110), 34, 34);
-
-        // Play Triangle
-        p.setBrush(Qt::white);
-        QPolygon triangle;
-        triangle << QPoint(153, 97) << QPoint(173, 110) << QPoint(153, 123);
-        p.drawPolygon(triangle);
-
-        // Text
-        p.setPen(Qt::white);
-        p.setFont(QFont("Segoe UI", 13, QFont::Bold));
-        p.drawText(QRect(10, 160, 300, 28), Qt::AlignCenter, "Video Preview (Verified Listing)");
-
-        p.setPen(QColor(148, 163, 184));
-        p.setFont(QFont("Segoe UI", 10));
-        p.drawText(QRect(10, 190, 300, 22), Qt::AlignCenter, "Click to play recorded clip of pages & condition");
-
-        coverLabel->setPixmap(pix);
-        coverLabel->setCursor(Qt::PointingHandCursor);
-    } else if (index >= 0 && index < imageList.size()) {
+    if (item.isVideo) {
+        // Switch to Native Embedded Video Player
+        if (coverLabel) {
+            coverLabel->clear();
+            coverLabel->setVisible(false);
+        }
+        if (inspectBtn_) {
+            inspectBtn_->setText("⤢ Full Video Preview");
+            inspectBtn_->setVisible(true);
+        }
+        if (mediaStack_ && videoPlayer_) {
+            mediaStack_->setCurrentWidget(videoPlayer_);
+            videoPlayer_->setVisible(true);
+            videoPlayer_->setVideoSource(item.url, book.title, book.coverImage);
+        }
         if (playVideoBtn) playVideoBtn->setVisible(false);
-        coverLabel->setCursor(Qt::ArrowCursor);
-        ImageLoader::instance().load(imageList[index], coverLabel, QSize(320, 280), book.title, book.author);
+    } else {
+        // Switch to Image Cover
+        if (videoPlayer_) {
+            videoPlayer_->stop();
+            videoPlayer_->setVisible(false);
+        }
+        if (mediaStack_ && coverLabel) {
+            coverLabel->clear();
+            coverLabel->update();
+            coverLabel->setVisible(true);
+            mediaStack_->setCurrentWidget(coverLabel);
+            coverLabel->setCursor(Qt::PointingHandCursor);
+            ImageLoader::instance().load(item.url, coverLabel, QSize(320, 330), book.title, book.author);
+        }
+        if (inspectBtn_) {
+            inspectBtn_->setText("🔍 Inspect Full Size");
+            inspectBtn_->setVisible(true);
+        }
+        if (playVideoBtn) playVideoBtn->setVisible(false);
     }
+
+    // Always reposition and raise overlays AFTER active stack widget switch!
+    updatePreviewOverlayPositions();
+    if (prevMediaBtn_) prevMediaBtn_->raise();
+    if (nextMediaBtn_) nextMediaBtn_->raise();
+    if (mediaCounterBadge_) mediaCounterBadge_->raise();
+    if (inspectBtn_) inspectBtn_->raise();
 }
 
 bool BookDetailsWindow::eventFilter(QObject *obj, QEvent *event)
 {
+    if (obj == previewBox_ && event->type() == QEvent::Resize) {
+        updatePreviewOverlayPositions();
+    }
+
+    if (event->type() == QEvent::KeyPress) {
+        if (isVisible()) {
+            QKeyEvent *ke = static_cast<QKeyEvent *>(event);
+            QWidget *focused = QApplication::focusWidget();
+            const bool inText = focused && (
+                qobject_cast<QLineEdit*>(focused) ||
+                qobject_cast<QTextEdit*>(focused) ||
+                qobject_cast<QPlainTextEdit*>(focused) ||
+                qobject_cast<QComboBox*>(focused)
+            );
+
+            if (!inText) {
+                const int key = ke->key();
+                if (key == Qt::Key_Left || key == Qt::Key_A || key == Qt::Key_Less || key == Qt::Key_Comma) {
+                    showPreviousMedia();
+                    return true;
+                }
+                if (key == Qt::Key_Right || key == Qt::Key_D || key == Qt::Key_Greater || key == Qt::Key_Period) {
+                    showNextMedia();
+                    return true;
+                }
+                if (key == Qt::Key_Space) {
+                    if (currentMediaIndex_ >= 0 && currentMediaIndex_ < mediaItems_.size() &&
+                        mediaItems_[currentMediaIndex_].isVideo && videoPlayer_) {
+                        if (videoPlayer_->isPlaying()) videoPlayer_->pause();
+                        else videoPlayer_->play();
+                        return true;
+                    }
+                }
+                if (key == Qt::Key_M) {
+                    if (currentMediaIndex_ >= 0 && currentMediaIndex_ < mediaItems_.size() &&
+                        mediaItems_[currentMediaIndex_].isVideo && videoPlayer_) {
+                        videoPlayer_->onMuteToggled();
+                        return true;
+                    }
+                }
+                if (key == Qt::Key_R) {
+                    if (currentMediaIndex_ >= 0 && currentMediaIndex_ < mediaItems_.size() &&
+                        mediaItems_[currentMediaIndex_].isVideo && videoPlayer_) {
+                        videoPlayer_->onReplayClicked();
+                        return true;
+                    }
+                }
+                if (key == Qt::Key_Escape || key == Qt::Key_Backspace) {
+                    handleBack();
+                    return true;
+                }
+            }
+        }
+    }
+
     if (obj == coverLabel && event->type() == QEvent::MouseButtonPress) {
-        if (currentMediaIndex_ == -1 && !currentVideoUrl_.isEmpty()) {
-            handlePlayVideo();
-            return true;
+        if (currentMediaIndex_ >= 0 && currentMediaIndex_ < mediaItems_.size()) {
+            if (mediaItems_[currentMediaIndex_].isVideo) {
+                handlePlayVideo();
+                return true;
+            } else {
+                openImageInspection();
+                return true;
+            }
         }
     }
     if (event->type() == QEvent::MouseButtonRelease) {
@@ -734,16 +1049,23 @@ bool BookDetailsWindow::eventFilter(QObject *obj, QEvent *event)
     return QWidget::eventFilter(obj, event);
 }
 
-void BookDetailsWindow::handlePlayVideo()
-
+void BookDetailsWindow::openImageInspection()
 {
-    if (currentVideoUrl_.isEmpty()) return;
+    if (mediaItems_.isEmpty()) return;
 
-    const QString local = ImageLoader::resolveLocalPath(currentVideoUrl_);
-    if (!local.isEmpty()) {
-        QDesktopServices::openUrl(QUrl::fromLocalFile(local));
-    } else {
-        QDesktopServices::openUrl(QUrl(currentVideoUrl_));
+    QVector<InspectionMediaItem> inspectionList;
+    for (const auto &item : mediaItems_) {
+        inspectionList.append({item.isVideo, item.url, book.title});
+    }
+
+    ImageInspectionDialog dlg(inspectionList, currentMediaIndex_, book.title, this);
+    dlg.exec();
+}
+
+void BookDetailsWindow::handlePlayVideo()
+{
+    if (videoPlayer_) {
+        videoPlayer_->play();
     }
 }
 
@@ -1058,8 +1380,87 @@ void BookDetailsWindow::handleOrder()
 
 void BookDetailsWindow::handleProposeExchange()
 {
-    // Keep existing behavior or emit signal
-    StyledMessageBox::information(this, "Exchange Request", "Exchange request flow initiated.");
+    if (!SessionManager::instance().isLoggedIn()) {
+        StyledMessageBox::information(this, "Sign In Required", "Please sign in to your account to propose a book exchange.");
+        return;
+    }
+
+    if (book.owner.id == SessionManager::instance().userId()) {
+        StyledMessageBox::warning(this, "Cannot Exchange", "You cannot propose an exchange for your own listed book.");
+        return;
+    }
+
+    // Strictly fetch available listings belonging to the user from the backend
+    QUrlQuery query;
+    query.addQueryItem("status", "available");
+    query.addQueryItem("limit", "50");
+
+    auto *reply = ApiClient::instance().get(QStringLiteral("/api/books/my"), query);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        auto [ok, json, errorMsg] = ApiClient::parseReply(reply);
+        reply->deleteLater();
+
+        if (!ok) {
+            StyledMessageBox::critical(this, "Inventory Check Failed", errorMsg.isEmpty() ? "Could not retrieve your listings." : errorMsg);
+            return;
+        }
+
+        QJsonArray booksArr = json[QStringLiteral("books")].toArray();
+        QVector<BookModel> userBooks;
+        for (const auto &val : booksArr) {
+            userBooks.append(BookModel::fromJson(val.toObject()));
+        }
+
+        if (userBooks.isEmpty()) {
+            StyledMessageBox::warning(
+                this,
+                "No Books Listed For Exchange",
+                "You must have at least one active book listed in your inventory to propose an exchange.\n\nPlease list a book first before sending an exchange proposal."
+            );
+            return;
+        }
+
+        ProposeExchangeDialog dlg(book, userBooks, this);
+        if (dlg.exec() != QDialog::Accepted) {
+            return;
+        }
+
+        QString offeredBookId = dlg.selectedOfferedBookId();
+        QString message = dlg.proposalMessage();
+
+        if (offeredBookId.isEmpty()) {
+            StyledMessageBox::warning(this, "Selection Required", "Please select one of your books to offer for exchange.");
+            return;
+        }
+
+        QJsonObject payload;
+        payload[QStringLiteral("requestedBookId")] = book.id;
+        payload[QStringLiteral("offeredBookId")] = offeredBookId;
+        if (!message.isEmpty()) {
+            payload[QStringLiteral("message")] = message;
+        }
+
+        auto *postReply = ApiClient::instance().post(QStringLiteral("/api/exchanges"), payload, true);
+        connect(postReply, &QNetworkReply::finished, this, [this, postReply]() {
+            auto [postOk, postJson, postError] = ApiClient::parseReply(postReply);
+            postReply->deleteLater();
+
+            if (postOk) {
+                StyledMessageBox::success(
+                    this,
+                    "Proposal Sent!",
+                    "Your exchange proposal has been submitted to the book owner.\n\nYou can track it anytime under Peer-to-Peer Book Exchanges (Sent Proposals)."
+                );
+                emit exchangeRequested(book.id);
+            } else {
+                StyledMessageBox::warning(
+                    this,
+                    "Proposal Failed",
+                    postError.isEmpty() ? "Failed to create exchange proposal." : postError
+                );
+            }
+        });
+    });
 }
 
 void BookDetailsWindow::handleBack()

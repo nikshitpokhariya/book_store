@@ -119,7 +119,7 @@ private:
 
     QNetworkAccessManager *m_nam;
 
-    static constexpr const char *kBaseUrl = "http://localhost:8080";
+    static constexpr const char *kBaseUrl = "http://127.0.0.1:8080";
 };
 
 #endif // APICLIENT_H

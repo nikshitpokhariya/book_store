@@ -5,7 +5,6 @@
 #include "browsewindow.h"
 #include "bookdetailswindow.h"
 #include "sellwindow.h"
-#include "sellbookwindow.h"
 #include "listingswindow.h"
 #include "orderswindow.h"
 #include "windows/CartWindow.h"

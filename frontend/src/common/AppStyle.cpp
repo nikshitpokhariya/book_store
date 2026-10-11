@@ -366,6 +366,14 @@ QString AppStyle::inactiveTabStyle()
 void AppStyle::applyElevation(QWidget *widget, int blurRadius, int yOffset, int alpha)
 {
     if (!widget) return;
+    // CRITICAL PERFORMANCE FIX:
+    // QGraphicsDropShadowEffect triggers multi-pass software CPU Gaussian rasterization
+    // on every repaint and every scroll tick. When applied to repeating elements in a QScrollArea
+    // (such as cards, chips, list rows), this bottlenecks the GUI thread and causes heavy scroll lag.
+    // We restrict QGraphicsDropShadowEffect strictly to modal dialogs and top-level cards (blurRadius > 16).
+    if (blurRadius <= 16) {
+        return;
+    }
     QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect(widget);
     shadow->setBlurRadius(blurRadius);
     shadow->setOffset(0, yOffset);

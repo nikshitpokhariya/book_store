@@ -11,6 +11,7 @@
 #include <QScrollArea>
 #include <QFrame>
 #include "StyledMessageBox.h"
+#include "CancelOrderDialog.h"
 #include <QInputDialog>
 #include <QDialog>
 #include <QSpinBox>
@@ -555,13 +556,8 @@ void OrderDetailWindow::loadOrder()
 
 void OrderDetailWindow::handleCancelOrder()
 {
-    bool ok = false;
-    QString reason = QInputDialog::getText(
-        this, "Cancel Order",
-        "Please provide a reason for cancellation:",
-        QLineEdit::Normal, QString(), &ok
-    );
-    if (!ok || reason.trimmed().isEmpty()) return;
+    QString reason = CancelOrderDialog::getCancelReason(this, m_order.orderNumber);
+    if (reason.trimmed().isEmpty()) return;
 
     QJsonObject payload;
     payload[QStringLiteral("reason")] = reason.trimmed();
@@ -584,13 +580,8 @@ void OrderDetailWindow::handleCancelOrder()
 
 void OrderDetailWindow::handleRequestReturn()
 {
-    bool ok = false;
-    QString reason = QInputDialog::getText(
-        this, "Request Return",
-        "Please state why you want to return this order:",
-        QLineEdit::Normal, QString(), &ok
-    );
-    if (!ok || reason.trimmed().isEmpty()) return;
+    QString reason = CancelOrderDialog::getReturnReason(this, m_order.orderNumber);
+    if (reason.trimmed().isEmpty()) return;
 
     QJsonObject payload;
     payload[QStringLiteral("reason")] = reason.trimmed();

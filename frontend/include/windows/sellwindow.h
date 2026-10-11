@@ -51,7 +51,8 @@ private:
         double price,
         const QString &condition,
         const QString &category,
-        const QString &isbn
+        const QString &isbn,
+        const QString &description
     );
 
     QString sellerName;
@@ -74,6 +75,7 @@ private:
     QLabel *photoCountBadge;
     struct ImageSlotUI {
         QFrame *frame{nullptr};
+        QLabel *badgeLabel{nullptr};
         QLabel *previewLabel{nullptr};
         QLabel *titleLabel{nullptr};
         QPushButton *actionButton{nullptr};

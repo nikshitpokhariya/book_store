@@ -9,7 +9,20 @@
     "app": {
         "threads_num": 1,
         "enable_session": false,
-        "document_root": "./public"
+        "document_root": "./public",
+        "client_max_body_size": "50M",
+        "client_max_memory_body_size": "50M",
+        "file_types": [
+            "html", "js", "css", "xml", "xsl", "txt", "svg", "ttf", "otf", "woff2", "woff", "eot",
+            "png", "jpg", "jpeg", "gif", "bmp", "ico", "icns", "webp",
+            "mp4", "mov", "webm", "avi", "mkv"
+        ],
+        "custom_mime_type": {
+            "mp4": "video/mp4",
+            "webm": "video/webm",
+            "mov": "video/quicktime",
+            "webp": "image/webp"
+        }
     },
 
     "log": {

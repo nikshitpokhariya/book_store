@@ -34,7 +34,7 @@ struct PaymentInfo {
 };
 
 struct ShippingInfo {
-  std::string trackingId; // "DEMO_TRACK_..."
+  std::string trackingId; // "TRK-IN-..."
   std::string status;     // "PLACED", "CONFIRMED", "PACKED", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED"
   double cost{0.0};       // 0.0
   std::chrono::system_clock::time_point updatedAt;

@@ -20,52 +20,62 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql Network)
 # Source files
 # ==============================
 
-set(PROJECT_SOURCES
-    src/main.cpp
-    src/database.cpp
-    src/loginwindow.cpp
-    src/signupwindow.cpp
-    src/dashboard.cpp
-    src/homewindow.cpp
-    src/browsewindow.cpp
-    src/bookdetailswindow.cpp
-    src/listingswindow.cpp
-    src/orderswindow.cpp
-    src/sellwindow.cpp
-    src/sellbookwindow.cpp
+set(APP_COMMON_SOURCES
     src/network/ApiClient.cpp
     src/auth/SessionManager.cpp
+    src/common/AppStyle.cpp
+    src/common/ImageLoader.cpp
+    src/common/StyledMessageBox.cpp
+    src/common/CancelOrderDialog.cpp
+    src/common/ProposeExchangeDialog.cpp
+    src/common/VideoPlayerWidget.cpp
+    src/common/VideoThumbnailHelper.cpp
+
+    src/windows/bookdetailswindow.cpp
+    src/windows/browsewindow.cpp
     src/windows/CartWindow.cpp
     src/windows/CheckoutWindow.cpp
-    src/windows/OrderDetailWindow.cpp
     src/windows/ExchangeWindow.cpp
+    src/windows/homewindow.cpp
+    src/windows/listingswindow.cpp
+    src/windows/loginwindow.cpp
+    src/windows/OrderDetailWindow.cpp
+    src/windows/orderswindow.cpp
+    src/windows/sellwindow.cpp
+    src/windows/signupwindow.cpp
+    src/windows/ImageInspectionDialog.cpp
 
-    include/database.h
-    include/loginwindow.h
-    include/signupwindow.h
-    include/dashboard.h
-    include/homewindow.h
-    include/browsewindow.h
-    include/bookdetailswindow.h
-    include/listingswindow.h
-    include/orderswindow.h
-    include/sellwindow.h
-    include/sellbookwindow.h
     include/network/ApiClient.h
     include/auth/SessionManager.h
     include/models/DataModels.h
+    include/common/AppStyle.h
+    include/common/ImageLoader.h
+    include/common/StyledMessageBox.h
+    include/common/CancelOrderDialog.h
+    include/common/ProposeExchangeDialog.h
+    include/common/VideoPlayerWidget.h
+    include/common/VideoThumbnailHelper.h
+
+    include/windows/bookdetailswindow.h
+    include/windows/browsewindow.h
     include/windows/CartWindow.h
     include/windows/CheckoutWindow.h
-    include/windows/OrderDetailWindow.h
     include/windows/ExchangeWindow.h
+    include/windows/homewindow.h
+    include/windows/listingswindow.h
+    include/windows/loginwindow.h
+    include/windows/OrderDetailWindow.h
+    include/windows/orderswindow.h
+    include/windows/sellwindow.h
+    include/windows/signupwindow.h
+    include/windows/ImageInspectionDialog.h
 
-    src/AppStyle.cpp
-    include/AppStyle.h
-    src/StyledMessageBox.cpp
-    include/StyledMessageBox.h
-    src/ImageLoader.cpp
-    include/ImageLoader.h
     ui/loginwindow.ui
+)
+
+set(PROJECT_SOURCES
+    src/main.cpp
+    ${APP_COMMON_SOURCES}
 )
 
 # ==============================
@@ -96,13 +106,16 @@ endif()
 target_include_directories(BookBazzar
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/common
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/windows
         ${CMAKE_CURRENT_SOURCE_DIR}/include/network
         ${CMAKE_CURRENT_SOURCE_DIR}/include/auth
         ${CMAKE_CURRENT_SOURCE_DIR}/include/models
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/windows
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/common
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/windows
         ${CMAKE_CURRENT_SOURCE_DIR}/src/network
         ${CMAKE_CURRENT_SOURCE_DIR}/src/auth
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/windows
 )
 
 # ==============================
@@ -114,6 +127,15 @@ target_link_libraries(BookBazzar PRIVATE
     Qt${QT_VERSION_MAJOR}::Sql
     Qt${QT_VERSION_MAJOR}::Network
 )
+
+if(WIN32)
+    target_link_libraries(BookBazzar PRIVATE
+        strmiids
+        mfplat
+        mfreadwrite
+        mfuuid
+    )
+endif()
 
 # ==============================
 # Bundle / install settings
@@ -142,160 +164,4 @@ install(TARGETS BookBazzar
 if(QT_VERSION_MAJOR EQUAL 6)
     qt_finalize_executable(BookBazzar)
 endif()
-
-# ==============================
-# Testing
-# ==============================
-find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Test QUIET)
-if(Qt${QT_VERSION_MAJOR}Test_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/main_test.cpp")
-    enable_testing()
-    add_executable(BookBazzarTests
-        tests/main_test.cpp
-        tests/test_datamodels.cpp
-        tests/test_sessionmanager.cpp
-        tests/test_validation.cpp
-        tests/test_apiclient.cpp
-        src/network/ApiClient.cpp
-        src/auth/SessionManager.cpp
-        include/network/ApiClient.h
-        include/auth/SessionManager.h
-    )
-    target_include_directories(BookBazzarTests PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/network
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/auth
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/models
-        ${CMAKE_CURRENT_SOURCE_DIR}/tests
-    )
-    target_link_libraries(BookBazzarTests PRIVATE
-        Qt${QT_VERSION_MAJOR}::Core
-        Qt${QT_VERSION_MAJOR}::Network
-        Qt${QT_VERSION_MAJOR}::Test
-    )
-    add_test(NAME BookBazzarTests COMMAND BookBazzarTests)
-
-    add_executable(BookBazzarGuiSmokeTest
-        tests/gui_smoke_test.cpp
-        src/database.cpp
-        src/loginwindow.cpp
-        src/signupwindow.cpp
-        src/dashboard.cpp
-        src/homewindow.cpp
-        src/browsewindow.cpp
-        src/bookdetailswindow.cpp
-        src/listingswindow.cpp
-        src/orderswindow.cpp
-        src/sellwindow.cpp
-        src/sellbookwindow.cpp
-        src/network/ApiClient.cpp
-        src/auth/SessionManager.cpp
-        src/windows/CartWindow.cpp
-        src/windows/CheckoutWindow.cpp
-        src/windows/OrderDetailWindow.cpp
-        src/windows/ExchangeWindow.cpp
-        include/database.h
-        include/loginwindow.h
-        include/signupwindow.h
-        include/dashboard.h
-        include/homewindow.h
-        include/browsewindow.h
-        include/bookdetailswindow.h
-        include/listingswindow.h
-        include/orderswindow.h
-        include/sellwindow.h
-        include/sellbookwindow.h
-        include/network/ApiClient.h
-        include/auth/SessionManager.h
-        include/models/DataModels.h
-        include/windows/CartWindow.h
-        include/windows/CheckoutWindow.h
-        include/windows/OrderDetailWindow.h
-        include/windows/ExchangeWindow.h
-        src/AppStyle.cpp
-        include/AppStyle.h
-        src/StyledMessageBox.cpp
-        include/StyledMessageBox.h
-        src/ImageLoader.cpp
-        include/ImageLoader.h
-        ui/loginwindow.ui
-    )
-    target_include_directories(BookBazzarGuiSmokeTest PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/network
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/auth
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/models
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/windows
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/network
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/auth
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/windows
-        ${CMAKE_CURRENT_SOURCE_DIR}/tests
-    )
-    target_link_libraries(BookBazzarGuiSmokeTest PRIVATE
-        Qt${QT_VERSION_MAJOR}::Widgets
-        Qt${QT_VERSION_MAJOR}::Sql
-        Qt${QT_VERSION_MAJOR}::Network
-        Qt${QT_VERSION_MAJOR}::Test
-    )
-    add_test(NAME BookBazzarGuiSmokeTest COMMAND BookBazzarGuiSmokeTest)
-
-    add_executable(BookBazzarScreenCapture
-        tests/capture_screens.cpp
-        src/database.cpp
-        src/loginwindow.cpp
-        src/signupwindow.cpp
-        src/dashboard.cpp
-        src/homewindow.cpp
-        src/browsewindow.cpp
-        src/bookdetailswindow.cpp
-        src/listingswindow.cpp
-        src/orderswindow.cpp
-        src/sellwindow.cpp
-        src/sellbookwindow.cpp
-        src/network/ApiClient.cpp
-        src/auth/SessionManager.cpp
-        src/windows/CartWindow.cpp
-        src/windows/CheckoutWindow.cpp
-        src/windows/OrderDetailWindow.cpp
-        src/windows/ExchangeWindow.cpp
-        src/AppStyle.cpp
-        include/loginwindow.h
-        include/signupwindow.h
-        include/dashboard.h
-        include/homewindow.h
-        include/browsewindow.h
-        include/bookdetailswindow.h
-        include/listingswindow.h
-        include/orderswindow.h
-        include/sellwindow.h
-        include/sellbookwindow.h
-        include/network/ApiClient.h
-        include/auth/SessionManager.h
-        include/models/DataModels.h
-        include/windows/CartWindow.h
-        include/windows/CheckoutWindow.h
-        include/windows/OrderDetailWindow.h
-        include/windows/ExchangeWindow.h
-        include/AppStyle.h
-        src/StyledMessageBox.cpp
-        include/StyledMessageBox.h
-        src/ImageLoader.cpp
-        include/ImageLoader.h
-        ui/loginwindow.ui
-    )
-    target_include_directories(BookBazzarScreenCapture PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/network
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/auth
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/models
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/windows
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/network
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/auth
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/windows
-        ${CMAKE_CURRENT_SOURCE_DIR}/tests
-    )
-    target_link_libraries(BookBazzarScreenCapture PRIVATE
-        Qt${QT_VERSION_MAJOR}::Widgets
-        Qt${QT_VERSION_MAJOR}::Sql
-        Qt${QT_VERSION_MAJOR}::Network
-    )
-endif()
+

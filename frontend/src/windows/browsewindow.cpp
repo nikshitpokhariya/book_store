@@ -23,6 +23,8 @@
 #include <QDoubleSpinBox>
 #include <QTimer>
 #include <QListWidget>
+#include <QShortcut>
+#include <QScrollBar>
 
 BrowseWindow::BrowseWindow(const QString &userName,
                            const QString &initialCategory,
@@ -90,6 +92,8 @@ void BrowseWindow::setupUI()
         %2
     )").arg(AppStyle::Background, AppStyle::scrollBarStyle()));
 
+    scrollArea->verticalScrollBar()->setSingleStep(28);
+
     QWidget *page = new QWidget();
     page->setStyleSheet(QString("background-color: %1;").arg(AppStyle::Background));
 
@@ -100,13 +104,46 @@ void BrowseWindow::setupUI()
     pageLayout->addWidget(createTopBar());
     pageLayout->addWidget(createFilterBar());
     pageLayout->addWidget(createBooksSection());
-    pageLayout->addWidget(createPaginationBar());
+    pageLayout->addStretch(1);
 
     scrollArea->setWidget(page);
 
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
-    mainLayout->addWidget(scrollArea);
+    mainLayout->setSpacing(0);
+    mainLayout->addWidget(scrollArea, 1);
+    mainLayout->addWidget(createPaginationBar());
+
+    // Keyboard shortcuts
+    auto *searchSc = new QShortcut(QKeySequence::Find, this);
+    connect(searchSc, &QShortcut::activated, this, [this]() {
+        if (searchEdit) {
+            searchEdit->setFocus();
+            searchEdit->selectAll();
+        }
+    });
+
+    auto *slashSc = new QShortcut(QKeySequence(Qt::Key_Slash), this);
+    connect(slashSc, &QShortcut::activated, this, [this]() {
+        if (searchEdit && !searchEdit->hasFocus()) {
+            searchEdit->setFocus();
+            searchEdit->selectAll();
+        }
+    });
+
+    auto *escSc = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+    connect(escSc, &QShortcut::activated, this, [this]() {
+        if (suggestionsList && suggestionsList->isVisible()) {
+            suggestionsList->setVisible(false);
+            return;
+        }
+        if (searchEdit && !searchEdit->text().isEmpty()) {
+            searchEdit->clear();
+            handleSearch();
+            return;
+        }
+        handleBack();
+    });
 }
 
 QWidget* BrowseWindow::createTopBar()
@@ -331,34 +368,44 @@ QWidget* BrowseWindow::createBooksSection()
 
 QWidget* BrowseWindow::createPaginationBar()
 {
-    QWidget *bar = new QWidget();
-    QHBoxLayout *layout = new QHBoxLayout(bar);
-    layout->setContentsMargins(36, 12, 36, 12);
+    QFrame *footer = new QFrame(this);
+    footer->setFixedHeight(64);
+    footer->setStyleSheet(R"(
+        QFrame {
+            background-color: #FFFFFF;
+            border-top: 1px solid #E2E8F0;
+        }
+    )");
+
+    QHBoxLayout *layout = new QHBoxLayout(footer);
+    layout->setContentsMargins(40, 0, 40, 0);
     layout->setSpacing(16);
 
-    prevPageButton = new QPushButton("← Previous Page");
-    prevPageButton->setMinimumHeight(38);
+    pageLabel = new QLabel("Page 1 of 1 (0 books)", footer);
+    pageLabel->setStyleSheet(QString("font-weight: 600; color: %1; font-size: 13px; border: none; background: transparent;").arg(AppStyle::TextSecondary));
+    layout->addWidget(pageLabel);
+
+    layout->addStretch();
+
+    prevPageButton = new QPushButton("← Previous Page", footer);
+    prevPageButton->setFixedHeight(38);
+    prevPageButton->setMinimumWidth(130);
     prevPageButton->setCursor(Qt::PointingHandCursor);
     prevPageButton->setStyleSheet(AppStyle::secondaryButtonStyle());
 
-    pageLabel = new QLabel("Page 1 of 1");
-    pageLabel->setStyleSheet(QString("color: %1; font-size: 13px; font-weight: 700;").arg(AppStyle::TextPrimary));
-
-    nextPageButton = new QPushButton("Next Page →");
-    nextPageButton->setMinimumHeight(38);
+    nextPageButton = new QPushButton("Next Page →", footer);
+    nextPageButton->setFixedHeight(38);
+    nextPageButton->setMinimumWidth(130);
     nextPageButton->setCursor(Qt::PointingHandCursor);
     nextPageButton->setStyleSheet(AppStyle::secondaryButtonStyle());
 
-    layout->addStretch();
     layout->addWidget(prevPageButton);
-    layout->addWidget(pageLabel);
     layout->addWidget(nextPageButton);
-    layout->addStretch();
 
     connect(prevPageButton, &QPushButton::clicked, this, &BrowseWindow::handlePrevPage);
     connect(nextPageButton, &QPushButton::clicked, this, &BrowseWindow::handleNextPage);
 
-    return bar;
+    return footer;
 }
 
 void BrowseWindow::clearBooksGrid()
@@ -491,11 +538,12 @@ QFrame* BrowseWindow::createBookCard(const BookModel &book)
     )").arg(AppStyle::SurfaceSubtle));
 
     QVBoxLayout *imgBoxLayout = new QVBoxLayout(imgBox);
-    imgBoxLayout->setContentsMargins(6, 6, 6, 6);
-    imgBoxLayout->setSpacing(4);
+    imgBoxLayout->setContentsMargins(0, 0, 0, 0);
+    imgBoxLayout->setSpacing(2);
 
     // Badges Row at top of image
     QHBoxLayout *badgesRow = new QHBoxLayout();
+    badgesRow->setContentsMargins(6, 6, 6, 0);
     badgesRow->setSpacing(6);
 
     QLabel *catBadge = new QLabel(book.category.isEmpty() ? "Book" : book.category, imgBox);
@@ -536,11 +584,11 @@ QFrame* BrowseWindow::createBookCard(const BookModel &book)
     }
     imgBoxLayout->addLayout(badgesRow);
 
-    // Cover image - Large thumbnail filling box
+    // Cover image - Full thumbnail filling box width & height
     QLabel *cover = new QLabel(imgBox);
-    cover->setFixedHeight(175);
+    cover->setFixedSize(252, 188);
     cover->setAlignment(Qt::AlignCenter);
-    ImageLoader::instance().load(book.coverImage, cover, QSize(220, 175), book.title, book.author);
+    ImageLoader::instance().load(book.coverImage, cover, QSize(252, 188), book.title, book.author);
     imgBoxLayout->addWidget(cover, 1);
 
     layout->addWidget(imgBox);

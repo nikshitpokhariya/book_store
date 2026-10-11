@@ -86,12 +86,11 @@ void OrdersWindow::setupUI()
     emptyL->addWidget(emptyLbl);
     emptyStateWidget->setVisible(false);
     contentLayout->addWidget(emptyStateWidget);
-
-    contentLayout->addWidget(createPaginationBar());
-    contentLayout->addStretch();
+    contentLayout->addStretch(1);
 
     scrollArea->setWidget(content);
-    mainLayout->addWidget(scrollArea);
+    mainLayout->addWidget(scrollArea, 1);
+    mainLayout->addWidget(createPaginationBar());
 }
 
 QWidget* OrdersWindow::createTopBar()
@@ -222,33 +221,42 @@ QWidget* OrdersWindow::createStatsBar()
 
 QWidget* OrdersWindow::createPaginationBar()
 {
-    auto *container = new QFrame();
-    container->setStyleSheet("background: transparent;");
+    auto *footer = new QFrame(this);
+    footer->setFixedHeight(64);
+    footer->setStyleSheet(R"(
+        QFrame {
+            background-color: #FFFFFF;
+            border-top: 1px solid #E2E8F0;
+        }
+    )");
 
-    auto *layout = new QHBoxLayout(container);
-    layout->setContentsMargins(0, 10, 0, 10);
-    layout->setSpacing(12);
+    auto *layout = new QHBoxLayout(footer);
+    layout->setContentsMargins(40, 0, 40, 0);
+    layout->setSpacing(16);
 
-    prevPageBtn = new QPushButton("← Previous", container);
+    pageIndicatorLabel = new QLabel("Page 1 of 1 (0 orders)", footer);
+    pageIndicatorLabel->setStyleSheet(QString("font-weight: 600; color: %1; font-size: 13px; border: none; background: transparent;").arg(AppStyle::TextSecondary));
+    layout->addWidget(pageIndicatorLabel);
+
+    layout->addStretch();
+
+    prevPageBtn = new QPushButton("← Previous", footer);
     prevPageBtn->setCursor(Qt::PointingHandCursor);
-    prevPageBtn->setFixedSize(100, 36);
+    prevPageBtn->setFixedHeight(38);
+    prevPageBtn->setMinimumWidth(110);
     prevPageBtn->setStyleSheet(AppStyle::secondaryButtonStyle());
     connect(prevPageBtn, &QPushButton::clicked, this, &OrdersWindow::handlePrevPage);
     layout->addWidget(prevPageBtn);
 
-    pageIndicatorLabel = new QLabel("Page 1 of 1", container);
-    pageIndicatorLabel->setStyleSheet(QString("font-weight: 600; color: %1; font-size: 13px;").arg(AppStyle::TextSecondary));
-    layout->addWidget(pageIndicatorLabel);
-
-    nextPageBtn = new QPushButton("Next →", container);
+    nextPageBtn = new QPushButton("Next →", footer);
     nextPageBtn->setCursor(Qt::PointingHandCursor);
-    nextPageBtn->setFixedSize(100, 36);
+    nextPageBtn->setFixedHeight(38);
+    nextPageBtn->setMinimumWidth(110);
     nextPageBtn->setStyleSheet(AppStyle::secondaryButtonStyle());
     connect(nextPageBtn, &QPushButton::clicked, this, &OrdersWindow::handleNextPage);
     layout->addWidget(nextPageBtn);
 
-    layout->addStretch();
-    return container;
+    return footer;
 }
 
 QPixmap OrdersWindow::loadOrGenerateCover(const QString &imagePath, const QString &title, const QString &author, int w, int h)

@@ -43,7 +43,20 @@ std::string generateOrderNumber() {
 }
 
 std::string generateTrackingId() {
-  return "DEMO_TRACK_" + generateHex(8);
+  const auto now = std::chrono::system_clock::now();
+  const auto time = std::chrono::system_clock::to_time_t(now);
+  std::tm tm{};
+#if defined(_WIN32)
+  gmtime_s(&tm, &time);
+#else
+  gmtime_r(&time, &tm);
+#endif
+  char dateBuf[16];
+  std::strftime(dateBuf, sizeof(dateBuf), "%Y%m%d", &tm);
+
+  std::string hex = generateHex(4);
+  std::transform(hex.begin(), hex.end(), hex.begin(), ::toupper);
+  return "TRK-IN-" + std::string(dateBuf) + "-" + hex;
 }
 
 void validateShippingAddress(const ShippingAddress &addr) {

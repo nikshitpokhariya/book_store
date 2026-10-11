@@ -25,9 +25,15 @@ QNetworkRequest ApiClient::buildRequest(const QString &path,
                                         const QUrlQuery &query,
                                         bool authenticated) const
 {
-    QString fullUrl = QString::fromLatin1(kBaseUrl);
-    if (!path.startsWith('/')) {
+    QString base = qEnvironmentVariable("BOOKBAZZAR_API_URL");
+    if (base.trimmed().isEmpty()) {
+        base = QString::fromLatin1(kBaseUrl);
+    }
+    QString fullUrl = base;
+    if (!path.startsWith('/') && !fullUrl.endsWith('/')) {
         fullUrl += '/';
+    } else if (path.startsWith('/') && fullUrl.endsWith('/')) {
+        fullUrl.chop(1);
     }
     fullUrl += path;
 
@@ -99,14 +105,15 @@ QNetworkReply *ApiClient::deleteResource(const QString &path, const QJsonObject 
 void ApiClient::uploadMedia(const QString &filePath,
                             std::function<void(bool success, const QString &url, const QString &errorMsg)> callback)
 {
-    QFile *file = new QFile(filePath);
-    if (!file->open(QIODevice::ReadOnly)) {
-        delete file;
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
         if (callback) {
             callback(false, QString(), QStringLiteral("Cannot open file for upload: %1").arg(filePath));
         }
         return;
     }
+    const QByteArray fileData = file.readAll();
+    file.close();
 
     QFileInfo fileInfo(filePath);
     const QString fileName = fileInfo.fileName();
@@ -121,6 +128,8 @@ void ApiClient::uploadMedia(const QString &filePath,
         mimeType = QStringLiteral("image/webp");
     } else if (suffix == QStringLiteral("gif")) {
         mimeType = QStringLiteral("image/gif");
+    } else if (suffix == QStringLiteral("bmp")) {
+        mimeType = QStringLiteral("image/bmp");
     } else if (suffix == QStringLiteral("mp4")) {
         mimeType = QStringLiteral("video/mp4");
     } else if (suffix == QStringLiteral("mov")) {
@@ -132,12 +141,11 @@ void ApiClient::uploadMedia(const QString &filePath,
     auto *multiPart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
 
     QHttpPart filePart;
-    filePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(mimeType));
-    filePart.setHeader(
-        QNetworkRequest::ContentDispositionHeader,
-        QVariant(QStringLiteral("form-data; name=\"file\"; filename=\"%1\"").arg(fileName)));
-    filePart.setBodyDevice(file);
-    file->setParent(multiPart);
+    filePart.setRawHeader("Content-Type", mimeType.toUtf8());
+    filePart.setRawHeader(
+        "Content-Disposition",
+        QStringLiteral("form-data; name=\"file\"; filename=\"%1\"").arg(fileName).toUtf8());
+    filePart.setBody(fileData);
 
     multiPart->append(filePart);
 
@@ -204,13 +212,21 @@ std::tuple<bool, QJsonObject, QString> ApiClient::parseReply(QNetworkReply *repl
     QString errorMsg;
     if (root.contains(QStringLiteral("message")) && root[QStringLiteral("message")].isString()) {
         errorMsg = root[QStringLiteral("message")].toString();
+    } else if (statusCode == 413) {
+        errorMsg = QStringLiteral("Image/video file exceeds server size limit (max 50MB)");
+    } else if (reply->error() == QNetworkReply::ConnectionRefusedError) {
+        errorMsg = QStringLiteral("Cannot connect to the server. Please check your network connection.");
     } else if (hasNetworkError) {
         errorMsg = reply->errorString();
     }
 
     if (hasNetworkError || statusCode < 200 || statusCode >= 300) {
+        qWarning() << "[ApiClient Error] Status:" << statusCode
+                   << "URL:" << reply->url().toString()
+                   << "Raw reply:" << reply->errorString()
+                   << "Body:" << data;
         if (errorMsg.isEmpty()) {
-            errorMsg = QStringLiteral("HTTP Error %1").arg(statusCode);
+            errorMsg = QStringLiteral("Request failed (code %1)").arg(statusCode);
         }
         return { false, root, errorMsg };
     }

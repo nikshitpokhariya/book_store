@@ -1,6 +1,7 @@
 #include "sellwindow.h"
 #include "AppStyle.h"
 #include "StyledMessageBox.h"
+#include "ImageLoader.h"
 #include "network/ApiClient.h"
 
 #include <QVBoxLayout>
@@ -292,52 +293,53 @@ void SellWindow::setupUI()
 
     // 6-Slot Grid (2 rows x 3 cols)
     QGridLayout *grid = new QGridLayout();
-    grid->setSpacing(12);
+    grid->setSpacing(14);
 
     imageSlots.clear();
     for (int i = 0; i < 6; ++i) {
         ImageSlotUI slot;
 
         slot.frame = new QFrame(mediaCard);
-        slot.frame->setFixedSize(140, 185);
+        slot.frame->setFixedSize(186, 238);
         slot.frame->setObjectName(QString("slotFrame_%1").arg(i));
-        slot.frame->setStyleSheet(QString(R"(
-            QFrame#slotFrame_%1 {
-                background-color: %2;
-                border: 2px dashed %3;
-                border-radius: 12px;
-            }
-            QFrame#slotFrame_%1:hover {
-                border-color: %4;
-            }
-        )").arg(QString::number(i), AppStyle::SurfaceSubtle, AppStyle::BorderStrong, AppStyle::Primary));
 
         QVBoxLayout *slotLayout = new QVBoxLayout(slot.frame);
-        slotLayout->setContentsMargins(6, 6, 6, 6);
+        slotLayout->setContentsMargins(8, 8, 8, 8);
         slotLayout->setSpacing(4);
 
+        // Top Badge / Title Tag
+        slot.badgeLabel = new QLabel(slot.frame);
+        slot.badgeLabel->setAlignment(Qt::AlignCenter);
+        slot.badgeLabel->setFixedHeight(22);
+        slotLayout->addWidget(slot.badgeLabel);
+
+        // Preview Label - 170x128 large thumbnail
         slot.previewLabel = new QLabel(slot.frame);
         slot.previewLabel->setAlignment(Qt::AlignCenter);
-        slot.previewLabel->setFixedSize(128, 95);
+        slot.previewLabel->setFixedSize(170, 128);
         slot.previewLabel->setStyleSheet("background: transparent; border: none;");
+        slotLayout->addWidget(slot.previewLabel);
 
+        // Title Label
         slot.titleLabel = new QLabel(SLOT_TITLES.value(i), slot.frame);
         slot.titleLabel->setAlignment(Qt::AlignCenter);
-        slot.titleLabel->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 600; border: none;").arg(AppStyle::TextMuted));
-        slot.titleLabel->setWordWrap(true);
+        slot.titleLabel->setFixedHeight(16);
+        slot.titleLabel->setStyleSheet(QString("color: %1; font-size: 10.5px; font-weight: 600; border: none;").arg(AppStyle::TextMuted));
+        slotLayout->addWidget(slot.titleLabel);
 
+        // Action Buttons Row
         QHBoxLayout *btnRow = new QHBoxLayout();
-        btnRow->setSpacing(4);
-        btnRow->setContentsMargins(0, 0, 0, 0);
+        btnRow->setSpacing(6);
+        btnRow->setContentsMargins(0, 2, 0, 0);
 
         slot.thumbnailButton = new QPushButton("★ Cover", slot.frame);
         slot.thumbnailButton->setCursor(Qt::PointingHandCursor);
-        slot.thumbnailButton->setFixedHeight(24);
+        slot.thumbnailButton->setFixedHeight(28);
         slot.thumbnailButton->setVisible(false);
 
-        slot.actionButton = new QPushButton("+ Add", slot.frame);
+        slot.actionButton = new QPushButton("+ Add Photo", slot.frame);
         slot.actionButton->setCursor(Qt::PointingHandCursor);
-        slot.actionButton->setFixedHeight(24);
+        slot.actionButton->setFixedHeight(28);
         slot.actionButton->setStyleSheet(AppStyle::secondaryButtonStyle());
 
         connect(slot.thumbnailButton, &QPushButton::clicked, this, [this, i]() {
@@ -356,8 +358,6 @@ void SellWindow::setupUI()
         btnRow->addWidget(slot.thumbnailButton, 1);
         btnRow->addWidget(slot.actionButton, 1);
 
-        slotLayout->addWidget(slot.previewLabel);
-        slotLayout->addWidget(slot.titleLabel);
         slotLayout->addLayout(btnRow);
 
         grid->addWidget(slot.frame, i / 3, i % 3);
@@ -430,7 +430,7 @@ void SellWindow::updateImageSlotsUI()
 
     // Update count badge
     if (count >= 4) {
-        photoCountBadge->setText(QString("Photos: %1 / 6 (Requirement Met)").arg(count));
+        photoCountBadge->setText(QString("Photos: %1 / 6 (Requirement Met ✓)").arg(count));
         photoCountBadge->setStyleSheet(QString(R"(
             background-color: %1;
             color: %2;
@@ -465,29 +465,55 @@ void SellWindow::updateImageSlotsUI()
             const QString path = selectedImagePaths[i];
             QPixmap pix(path);
             if (!pix.isNull()) {
-                slot.previewLabel->setPixmap(pix.scaled(128, 95, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                slot.previewLabel->setPixmap(ImageLoader::coverCrop(pix, QSize(170, 128), 8));
             } else {
                 slot.previewLabel->setText("Image loaded");
             }
+            slot.titleLabel->setVisible(false);
+
             slot.actionButton->setText("✕ Remove");
-            slot.actionButton->setStyleSheet(AppStyle::dangerButtonStyle());
-            slot.actionButton->setFixedHeight(24);
+            slot.actionButton->setStyleSheet(R"(
+                QPushButton {
+                    background-color: #DC2626;
+                    color: #FFFFFF;
+                    font-size: 11px;
+                    font-weight: 700;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 2px 4px;
+                }
+                QPushButton:hover {
+                    background-color: #B91C1C;
+                }
+            )");
+            slot.actionButton->setFixedHeight(28);
 
             slot.thumbnailButton->setVisible(true);
+            slot.thumbnailButton->setFixedHeight(28);
             if (i == selectedThumbnailIndex) {
                 slot.thumbnailButton->setText("★ Cover");
                 slot.thumbnailButton->setStyleSheet(QString(R"(
                     QPushButton {
                         background-color: %1;
                         color: #FFFFFF;
-                        font-size: 10px;
+                        font-size: 11px;
                         font-weight: 700;
                         border: none;
                         border-radius: 6px;
+                        padding: 2px 4px;
                     }
                 )").arg(AppStyle::Primary));
-                slot.titleLabel->setText("★ PRIMARY COVER");
-                slot.titleLabel->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 800;").arg(AppStyle::Primary));
+                slot.badgeLabel->setText("★ PRIMARY COVER");
+                slot.badgeLabel->setStyleSheet(QString(R"(
+                    QLabel {
+                        background-color: %1;
+                        color: #FFFFFF;
+                        font-size: 9.5px;
+                        font-weight: 800;
+                        border-radius: 5px;
+                        padding: 2px 8px;
+                    }
+                )").arg(AppStyle::Primary));
                 slot.frame->setStyleSheet(QString(R"(
                     QFrame#slotFrame_%1 {
                         background-color: %2;
@@ -496,10 +522,34 @@ void SellWindow::updateImageSlotsUI()
                     }
                 )").arg(QString::number(i), AppStyle::PrimaryLight, AppStyle::Primary));
             } else {
-                slot.thumbnailButton->setText("Set Cover");
-                slot.thumbnailButton->setStyleSheet(AppStyle::secondaryButtonStyle());
-                slot.titleLabel->setText(SLOT_TITLES.value(i));
-                slot.titleLabel->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 600;").arg(AppStyle::TextPrimary));
+                slot.thumbnailButton->setText("★ Set Cover");
+                slot.thumbnailButton->setStyleSheet(QString(R"(
+                    QPushButton {
+                        background-color: #FFFFFF;
+                        color: %1;
+                        border: 1.5px solid %2;
+                        font-size: 11px;
+                        font-weight: 700;
+                        border-radius: 6px;
+                        padding: 2px 4px;
+                    }
+                    QPushButton:hover {
+                        background-color: %3;
+                        border-color: %1;
+                    }
+                )").arg(AppStyle::Primary, AppStyle::PrimaryBorder, AppStyle::PrimaryLight));
+                slot.badgeLabel->setText(SLOT_TITLES.value(i));
+                slot.badgeLabel->setStyleSheet(QString(R"(
+                    QLabel {
+                        background-color: %1;
+                        color: %2;
+                        font-size: 9.5px;
+                        font-weight: 700;
+                        border: 1px solid %3;
+                        border-radius: 5px;
+                        padding: 2px 6px;
+                    }
+                )").arg(AppStyle::SurfaceSubtle, AppStyle::TextPrimary, AppStyle::BorderSubtle));
                 slot.frame->setStyleSheet(QString(R"(
                     QFrame#slotFrame_%1 {
                         background-color: #FFFFFF;
@@ -511,13 +561,38 @@ void SellWindow::updateImageSlotsUI()
         } else {
             slot.thumbnailButton->setVisible(false);
             slot.previewLabel->clear();
-            slot.previewLabel->setText(i < 4 ? "📷 Required" : "📷 Optional");
-            slot.previewLabel->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: 600;").arg(i < 4 ? AppStyle::Primary : AppStyle::TextMuted));
+            slot.previewLabel->setText(i < 4 ? "📷 Required\n+ Add Photo" : "📷 Optional\n+ Add Photo");
+            slot.previewLabel->setStyleSheet(QString(R"(
+                QLabel {
+                    color: %1;
+                    font-size: 11.5px;
+                    font-weight: 600;
+                    background-color: #F8FAFC;
+                    border: 1.5px dashed %2;
+                    border-radius: 8px;
+                }
+            )").arg(i < 4 ? AppStyle::Primary : AppStyle::TextMuted,
+                    i < 4 ? AppStyle::PrimaryBorder : AppStyle::BorderSubtle));
+            slot.badgeLabel->setText(i < 4 ? "Required Slot" : "Optional Slot");
+            slot.badgeLabel->setStyleSheet(QString(R"(
+                QLabel {
+                    background-color: %1;
+                    color: %2;
+                    border: 1px solid %3;
+                    font-size: 9.5px;
+                    font-weight: 700;
+                    border-radius: 5px;
+                    padding: 2px 6px;
+                }
+            )").arg(i < 4 ? AppStyle::WarningLight : AppStyle::SurfaceSubtle,
+                    i < 4 ? AppStyle::WarningText : AppStyle::TextMuted,
+                    i < 4 ? AppStyle::WarningBorder : AppStyle::BorderSubtle));
+            slot.titleLabel->setVisible(true);
             slot.titleLabel->setText(SLOT_TITLES.value(i));
-            slot.titleLabel->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 600;").arg(AppStyle::TextMuted));
-            slot.actionButton->setText("+ Add");
+            slot.titleLabel->setStyleSheet(QString("color: %1; font-size: 10.5px; font-weight: 600;").arg(AppStyle::TextMuted));
+            slot.actionButton->setText("+ Add Photo");
             slot.actionButton->setStyleSheet(AppStyle::secondaryButtonStyle());
-            slot.actionButton->setFixedHeight(24);
+            slot.actionButton->setFixedHeight(28);
             slot.frame->setStyleSheet(QString(R"(
                 QFrame#slotFrame_%1 {
                     background-color: %2;
@@ -526,6 +601,7 @@ void SellWindow::updateImageSlotsUI()
                 }
                 QFrame#slotFrame_%1:hover {
                     border-color: %4;
+                    background-color: #FFFFFF;
                 }
             )").arg(QString::number(i), AppStyle::SurfaceSubtle, AppStyle::BorderStrong, AppStyle::Primary));
         }
@@ -678,7 +754,7 @@ void SellWindow::sellBook()
     }
 
     sellButton->setEnabled(false);
-    sellButton->setText(QString("Uploading image 1 of %1...").arg(selectedImagePaths.size()));
+    sellButton->setText(QString("Uploading photo 1 of %1...").arg(selectedImagePaths.size()));
 
     auto uploadedUrls = std::make_shared<QStringList>();
     auto currentIndex = std::make_shared<int>(0);
@@ -686,18 +762,22 @@ void SellWindow::sellBook()
 
     auto uploadNextImage = std::make_shared<std::function<void()>>();
     *uploadNextImage = [this, uploadedUrls, currentIndex, totalCount, uploadNextImage,
-                        title, author, price, condition, category, isbn]() {
+                        title, author, price, condition, category, isbn, description]() {
         if (*currentIndex < totalCount) {
-            const QString path = selectedImagePaths.at(*currentIndex);
-            sellButton->setText(QString("Uploading image %1 of %2...").arg(*currentIndex + 1).arg(totalCount));
+            const QString currentPath = selectedImagePaths.at(*currentIndex);
+            sellButton->setText(QString("Uploading photo %1 of %2...").arg(*currentIndex + 1).arg(totalCount));
 
-            ApiClient::instance().uploadMedia(path, [this, uploadedUrls, currentIndex, totalCount, uploadNextImage,
-                                                     title, author, price, condition, category, isbn](bool ok, const QString &url, const QString &err) {
-                if (!ok) {
+            ApiClient::instance().uploadMedia(currentPath, [this, uploadedUrls, currentIndex, totalCount, uploadNextImage,
+                                                             title, author, price, condition, category, isbn, description](bool ok, const QString &url, const QString &err) {
+                if (!ok || url.isEmpty()) {
                     sellButton->setEnabled(true);
                     sellButton->setText("Publish Book Listing");
-                    StyledMessageBox::critical(this, "Upload Failed",
-                        QString("Failed to upload image %1: %2").arg(*currentIndex + 1).arg(err));
+                    qWarning() << "[Upload Error] Failed to upload image" << (*currentIndex + 1) << ":" << err;
+                    StyledMessageBox::critical(
+                        this,
+                        "Upload Failed",
+                        QString("Failed to upload image %1: %2").arg(*currentIndex + 1).arg(err)
+                    );
                     return;
                 }
 
@@ -710,16 +790,17 @@ void SellWindow::sellBook()
 
         // All photos uploaded! Upload video if selected
         if (!selectedVideoPath.isEmpty()) {
-            sellButton->setText("Uploading video preview...");
-            ApiClient::instance().uploadMedia(selectedVideoPath, [this, uploadedUrls, title, author, price, condition, category, isbn](bool ok, const QString &videoUrl, const QString &err) {
+            sellButton->setText("Uploading inspection video...");
+            ApiClient::instance().uploadMedia(selectedVideoPath, [this, uploadedUrls, title, author, price, condition, category, isbn, description](bool ok, const QString &videoUrl, const QString &err) {
                 if (!ok) {
+                    qWarning() << "[Upload Warning] Video upload failed:" << err;
                     StyledMessageBox::warning(this, "Video Upload Warning",
-                        QString("Video upload failed (%1). The listing will be published without video.").arg(err));
+                        QString("Video upload failed (%1). Listing will be published without video.").arg(err));
                 }
-                finishBookPublishing(*uploadedUrls, ok ? videoUrl : QString(), title, author, price, condition, category, isbn);
+                finishBookPublishing(*uploadedUrls, ok ? videoUrl : QString(), title, author, price, condition, category, isbn, description);
             });
         } else {
-            finishBookPublishing(*uploadedUrls, QString(), title, author, price, condition, category, isbn);
+            finishBookPublishing(*uploadedUrls, QString(), title, author, price, condition, category, isbn, description);
         }
     };
 
@@ -734,9 +815,10 @@ void SellWindow::finishBookPublishing(
     double price,
     const QString &condition,
     const QString &category,
-    const QString &isbn)
+    const QString &isbn,
+    const QString &description)
 {
-    sellButton->setText("Publishing Book Listing...");
+    sellButton->setText("Publishing listing...");
 
     QJsonObject body;
     body[QStringLiteral("title")] = title;
@@ -745,6 +827,9 @@ void SellWindow::finishBookPublishing(
     body[QStringLiteral("condition")] = condition;
     body[QStringLiteral("category")] = category;
     body[QStringLiteral("isbn")] = isbn;
+    if (!description.isEmpty()) {
+        body[QStringLiteral("description")] = description;
+    }
 
     int thumbIdx = selectedThumbnailIndex;
     if (thumbIdx >= uploadedUrls.size()) {
@@ -784,10 +869,11 @@ void SellWindow::finishBookPublishing(
             emit bookPublished();
             emit backRequested();
         } else {
+            qWarning() << "[Publish Error] Failed to publish book listing:" << errorMsg;
             StyledMessageBox::critical(
                 this,
                 "Unable to Publish",
-                errorMsg.isEmpty() ? "The book could not be added to the marketplace." : errorMsg
+                errorMsg.isEmpty() ? "Failed to publish listing. Please check your connection and try again." : errorMsg
             );
         }
     });

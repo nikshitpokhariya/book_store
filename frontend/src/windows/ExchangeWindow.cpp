@@ -10,6 +10,7 @@
 #include <QScrollArea>
 #include <QFrame>
 #include "StyledMessageBox.h"
+#include "CancelOrderDialog.h"
 #include <QInputDialog>
 #include <QFileInfo>
 #include <QPainter>
@@ -89,12 +90,11 @@ void ExchangeWindow::setupUI()
 
     emptyStateWidget->setVisible(false);
     contentLayout->addWidget(emptyStateWidget);
-
-    contentLayout->addWidget(createPaginationBar());
-    contentLayout->addStretch();
+    contentLayout->addStretch(1);
 
     scrollArea->setWidget(content);
     mainLayout->addWidget(scrollArea, 1);
+    mainLayout->addWidget(createPaginationBar());
 }
 
 QWidget* ExchangeWindow::createTopBar()
@@ -188,33 +188,42 @@ void ExchangeWindow::handleTabChange(int tabIndex)
 
 QWidget* ExchangeWindow::createPaginationBar()
 {
-    auto *container = new QFrame();
-    container->setStyleSheet("background: transparent;");
+    auto *footer = new QFrame(this);
+    footer->setFixedHeight(64);
+    footer->setStyleSheet(R"(
+        QFrame {
+            background-color: #FFFFFF;
+            border-top: 1px solid #E2E8F0;
+        }
+    )");
 
-    auto *layout = new QHBoxLayout(container);
-    layout->setContentsMargins(0, 10, 0, 10);
-    layout->setSpacing(12);
+    auto *layout = new QHBoxLayout(footer);
+    layout->setContentsMargins(40, 0, 40, 0);
+    layout->setSpacing(16);
 
-    prevPageBtn = new QPushButton("← Previous", container);
+    pageIndicatorLabel = new QLabel("Page 1 of 1 (0 proposals)", footer);
+    pageIndicatorLabel->setStyleSheet(QString("font-weight: 600; color: %1; font-size: 13px; border: none; background: transparent;").arg(AppStyle::TextSecondary));
+    layout->addWidget(pageIndicatorLabel);
+
+    layout->addStretch();
+
+    prevPageBtn = new QPushButton("← Previous", footer);
     prevPageBtn->setCursor(Qt::PointingHandCursor);
-    prevPageBtn->setFixedSize(100, 36);
+    prevPageBtn->setFixedHeight(38);
+    prevPageBtn->setMinimumWidth(110);
     prevPageBtn->setStyleSheet(AppStyle::secondaryButtonStyle());
     connect(prevPageBtn, &QPushButton::clicked, this, &ExchangeWindow::handlePrevPage);
     layout->addWidget(prevPageBtn);
 
-    pageIndicatorLabel = new QLabel("Page 1 of 1", container);
-    pageIndicatorLabel->setStyleSheet(QString("font-weight: 600; color: %1; font-size: 13px;").arg(AppStyle::TextSecondary));
-    layout->addWidget(pageIndicatorLabel);
-
-    nextPageBtn = new QPushButton("Next →", container);
+    nextPageBtn = new QPushButton("Next →", footer);
     nextPageBtn->setCursor(Qt::PointingHandCursor);
-    nextPageBtn->setFixedSize(100, 36);
+    nextPageBtn->setFixedHeight(38);
+    nextPageBtn->setMinimumWidth(110);
     nextPageBtn->setStyleSheet(AppStyle::secondaryButtonStyle());
     connect(nextPageBtn, &QPushButton::clicked, this, &ExchangeWindow::handleNextPage);
     layout->addWidget(nextPageBtn);
 
-    layout->addStretch();
-    return container;
+    return footer;
 }
 
 QPixmap ExchangeWindow::loadOrGenerateCover(const QString &imagePath, const QString &title, const QString &author, int w, int h)
@@ -464,18 +473,11 @@ void ExchangeWindow::handleAccept(const QString &exchangeId)
 
 void ExchangeWindow::handleReject(const QString &exchangeId)
 {
-    bool ok = false;
-    QString reason = QInputDialog::getText(
-        this, "Decline Exchange",
-        "Reason for declining (optional):",
-        QLineEdit::Normal, QString(), &ok
-    );
-    if (!ok) return;
+    QString reason = CancelOrderDialog::getRejectExchangeReason(this);
+    if (reason.trimmed().isEmpty()) return;
 
     QJsonObject payload;
-    if (!reason.trimmed().isEmpty()) {
-        payload[QStringLiteral("reason")] = reason.trimmed();
-    }
+    payload[QStringLiteral("reason")] = reason.trimmed();
 
     auto *reply = ApiClient::instance().post(QStringLiteral("/api/exchanges/") + exchangeId + QStringLiteral("/reject"), payload, true);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {

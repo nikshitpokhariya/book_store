@@ -14,6 +14,8 @@ public:
 
   ADD_METHOD_TO(ReviewController::getBookReviews, "/api/books/{1}/reviews",
                 drogon::Get);
+  ADD_METHOD_TO(ReviewController::getBookReviews, "/api/reviews/book/{1}",
+                drogon::Get);
 
   ADD_METHOD_TO(ReviewController::getSellerReviews, "/api/reviews/seller/{1}",
                 drogon::Get);

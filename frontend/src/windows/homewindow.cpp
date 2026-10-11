@@ -23,6 +23,8 @@
 #include <QLabel>
 #include <QFrame>
 #include <QScrollArea>
+#include <QScrollBar>
+#include <QShortcut>
 #include <QStackedWidget>
 #include "StyledMessageBox.h"
 #include <QSizePolicy>
@@ -72,6 +74,7 @@ void HomeWindow::setupUI()
     homeScrollArea = new QScrollArea(mainStackedWidget);
     homeScrollArea->setWidgetResizable(true);
     homeScrollArea->setFrameShape(QFrame::NoFrame);
+    homeScrollArea->verticalScrollBar()->setSingleStep(28);
     homeScrollArea->setStyleSheet(QString(R"(
         QScrollArea {
             background-color: %1;
@@ -105,6 +108,14 @@ void HomeWindow::setupUI()
 
     mainStackedWidget->addWidget(homeScrollArea);
     mainStackedWidget->setCurrentWidget(homeScrollArea);
+
+    // Global navigation shortcuts
+    auto *escSc = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+    connect(escSc, &QShortcut::activated, this, [this]() {
+        if (mainStackedWidget && mainStackedWidget->currentWidget() != homeScrollArea) {
+            popPage();
+        }
+    });
 
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
@@ -564,7 +575,7 @@ QPixmap HomeWindow::loadOrGenerateCover(
         if (info.exists()) {
             QPixmap real(imagePath);
             if (!real.isNull()) {
-                return real.scaled(width, height, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                return ImageLoader::coverCrop(real, QSize(width, height), 10);
             }
         }
     }
@@ -650,7 +661,7 @@ QFrame* HomeWindow::createBookCard(
     layout->setContentsMargins(14, 14, 14, 14);
     layout->setSpacing(8);
 
-    // Image container box
+    // Image container box - Full cover fill without empty gutters
     QFrame *imgBox = new QFrame(card);
     imgBox->setFixedHeight(220);
     imgBox->setStyleSheet(QString(R"(
@@ -661,18 +672,19 @@ QFrame* HomeWindow::createBookCard(
         }
     )").arg(AppStyle::BorderSubtle));
     QVBoxLayout *imgBoxLayout = new QVBoxLayout(imgBox);
-    imgBoxLayout->setContentsMargins(4, 4, 4, 4);
+    imgBoxLayout->setContentsMargins(0, 0, 0, 0);
+    imgBoxLayout->setSpacing(0);
     imgBoxLayout->setAlignment(Qt::AlignCenter);
 
     QLabel *image = new QLabel(imgBox);
-    image->setFixedSize(160, 205);
+    image->setFixedSize(252, 220);
     image->setAlignment(Qt::AlignCenter);
     image->setScaledContents(false);
 
-    QPixmap initialPix = loadOrGenerateCover(imagePath, title, author, 150, 200);
+    QPixmap initialPix = loadOrGenerateCover(imagePath, title, author, 252, 220);
     image->setPixmap(initialPix);
     if (!imagePath.isEmpty()) {
-        ImageLoader::instance().load(imagePath, image, QSize(150, 200));
+        ImageLoader::instance().load(imagePath, image, QSize(252, 220));
     }
     imgBoxLayout->addWidget(image);
     layout->addWidget(imgBox);
