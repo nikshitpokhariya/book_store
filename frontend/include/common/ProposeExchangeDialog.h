@@ -22,6 +22,9 @@ public:
     QString selectedOfferedBookId() const;
     QString proposalMessage() const;
 
+protected:
+    void keyPressEvent(QKeyEvent *event) override;
+
 private slots:
     void onBookSelectionChanged(int index);
 

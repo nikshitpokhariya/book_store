@@ -117,6 +117,25 @@ void HomeWindow::setupUI()
         }
     });
 
+    auto *searchSc = new QShortcut(QKeySequence::Find, this);
+    connect(searchSc, &QShortcut::activated, this, [this]() {
+        if (mainStackedWidget && mainStackedWidget->currentWidget() == homeScrollArea && searchEdit) {
+            searchEdit->setFocus();
+            searchEdit->selectAll();
+        }
+    });
+
+    auto *refreshSc = new QShortcut(QKeySequence::Refresh, this);
+    connect(refreshSc, &QShortcut::activated, this, [this]() {
+        if (mainStackedWidget && mainStackedWidget->currentWidget() == homeScrollArea) {
+            refreshRecentBooks();
+            refreshCartCount();
+        }
+    });
+
+    auto *cartSc = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_T), this);
+    connect(cartSc, &QShortcut::activated, this, &HomeWindow::handleCart);
+
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->addWidget(mainStackedWidget);
@@ -943,25 +962,75 @@ void HomeWindow::showUserProfile()
         reply->deleteLater();
 
         QDialog dlg(this);
-        dlg.setWindowTitle("BookBazzar - User Profile");
-        dlg.resize(420, 340);
-        dlg.setStyleSheet(QString("background-color: %1;").arg(AppStyle::Background));
+        dlg.setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+        dlg.setAttribute(Qt::WA_TranslucentBackground);
+        dlg.setModal(true);
 
-        QVBoxLayout *layout = new QVBoxLayout(&dlg);
-        layout->setContentsMargins(28, 28, 28, 28);
-        layout->setSpacing(16);
+        QVBoxLayout *rootLayout = new QVBoxLayout(&dlg);
+        rootLayout->setContentsMargins(16, 16, 16, 16);
 
         QFrame *card = new QFrame(&dlg);
-        card->setStyleSheet(AppStyle::cardStyle());
-        AppStyle::applyElevation(card, 16, 4, 15);
+        card->setObjectName("dialogCard");
+        card->setStyleSheet(AppStyle::dialogCardStyle());
+        AppStyle::applyElevation(card, 24, 8, 25);
 
         QVBoxLayout *cardLayout = new QVBoxLayout(card);
-        cardLayout->setContentsMargins(24, 24, 24, 24);
-        cardLayout->setSpacing(12);
+        cardLayout->setContentsMargins(28, 24, 28, 24);
+        cardLayout->setSpacing(16);
 
-        QLabel *heading = new QLabel("Account Profile");
-        heading->setStyleSheet(QString("color: %1; font-size: 18px; font-weight: 800;").arg(AppStyle::TextPrimary));
-        cardLayout->addWidget(heading);
+        // Header with icon and close button
+        QHBoxLayout *hdrRow = new QHBoxLayout();
+        hdrRow->setSpacing(12);
+
+        QLabel *iconLabel = new QLabel(card);
+        iconLabel->setFixedSize(40, 40);
+        iconLabel->setAlignment(Qt::AlignCenter);
+        iconLabel->setText("👤");
+        iconLabel->setStyleSheet(QString(R"(
+            background-color: %1;
+            color: %2;
+            border-radius: 20px;
+            font-size: 18px;
+        )").arg(AppStyle::PrimaryLight, AppStyle::Primary));
+        hdrRow->addWidget(iconLabel);
+
+        QVBoxLayout *titleBox = new QVBoxLayout();
+        titleBox->setSpacing(2);
+        QLabel *heading = new QLabel("Account Profile", card);
+        heading->setStyleSheet(AppStyle::dialogHeaderStyle());
+        QLabel *subHeading = new QLabel("Your BookBazzar member details and credentials", card);
+        subHeading->setStyleSheet(AppStyle::dialogSubheaderStyle());
+        titleBox->addWidget(heading);
+        titleBox->addWidget(subHeading);
+        hdrRow->addLayout(titleBox, 1);
+
+        QPushButton *xBtn = new QPushButton("✕", card);
+        xBtn->setCursor(Qt::PointingHandCursor);
+        xBtn->setFixedSize(28, 28);
+        xBtn->setStyleSheet(R"(
+            QPushButton {
+                background-color: #F1F5F9;
+                color: #64748B;
+                border: none;
+                border-radius: 14px;
+                font-size: 13px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #E2E8F0;
+                color: #0F172A;
+            }
+        )");
+        connect(xBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+        hdrRow->addWidget(xBtn, 0, Qt::AlignTop);
+
+        cardLayout->addLayout(hdrRow);
+
+        // Divider
+        QFrame *divider = new QFrame(card);
+        divider->setFrameShape(QFrame::HLine);
+        divider->setStyleSheet("background-color: #E2E8F0; max-height: 1px; border: none;");
+        cardLayout->addWidget(divider);
 
         QJsonObject userObj = json.value(QStringLiteral("user")).toObject();
         QString uname = userObj.value(QStringLiteral("username")).toString(SessionManager::instance().username());
@@ -978,12 +1047,12 @@ void HomeWindow::showUserProfile()
             createdAt = "Active Member";
         }
 
-        auto addField = [&cardLayout](const QString &label, const QString &val) {
+        auto addField = [card, &cardLayout](const QString &label, const QString &val) {
             QHBoxLayout *row = new QHBoxLayout();
-            QLabel *l = new QLabel(label);
-            l->setStyleSheet(QString("color: %1; font-size: 13px; font-weight: 600; min-width: 90px;").arg(AppStyle::TextSecondary));
-            QLabel *v = new QLabel(val);
-            v->setStyleSheet(QString("color: %1; font-size: 13px;").arg(AppStyle::TextPrimary));
+            QLabel *l = new QLabel(label, card);
+            l->setStyleSheet(QString("color: %1; font-size: 13px; font-weight: 700; min-width: 100px;").arg(AppStyle::TextSecondary));
+            QLabel *v = new QLabel(val, card);
+            v->setStyleSheet(QString("color: %1; font-size: 13.5px; font-weight: 500;").arg(AppStyle::TextPrimary));
             v->setTextInteractionFlags(Qt::TextSelectableByMouse);
             row->addWidget(l);
             row->addWidget(v, 1);
@@ -991,19 +1060,22 @@ void HomeWindow::showUserProfile()
         };
 
         addField("Username:", uname);
-        addField("Email:", email);
-        addField("User ID:", uid);
-        addField("Role:", role);
-        addField("Joined:", createdAt);
+        addField("Email Address:", email);
+        addField("Account ID:", uid);
+        addField("Role:", role.toUpper());
+        addField("Member Since:", createdAt);
 
-        layout->addWidget(card);
+        cardLayout->addSpacing(8);
 
-        QPushButton *closeBtn = new QPushButton("Close");
+        QPushButton *closeBtn = new QPushButton("Close Profile", card);
+        closeBtn->setCursor(Qt::PointingHandCursor);
         closeBtn->setMinimumHeight(40);
         closeBtn->setStyleSheet(AppStyle::primaryButtonStyle());
         connect(closeBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
-        layout->addWidget(closeBtn);
+        cardLayout->addWidget(closeBtn);
 
+        rootLayout->addWidget(card);
+        dlg.adjustSize();
         dlg.exec();
     });
 }

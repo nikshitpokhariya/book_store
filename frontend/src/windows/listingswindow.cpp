@@ -563,52 +563,111 @@ void ListingsWindow::handleDeleteListing(const QString &bookId, const QString &b
 void ListingsWindow::handleEditListing(const BookModel &book)
 {
     QDialog dialog(this);
-    dialog.setWindowTitle("Edit Book Listing");
-    dialog.resize(520, 560);
-    dialog.setStyleSheet(QString("background-color: %1;").arg(AppStyle::Background));
+    dialog.setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+    dialog.setAttribute(Qt::WA_TranslucentBackground);
+    dialog.setModal(true);
 
-    QVBoxLayout layout(&dialog);
-    layout.setSpacing(14);
-    layout.setContentsMargins(28, 24, 28, 24);
+    QVBoxLayout rootLayout(&dialog);
+    rootLayout.setContentsMargins(16, 16, 16, 16);
 
-    QLabel *hdr = new QLabel("Edit Book Details", &dialog);
-    hdr->setStyleSheet(QString("font-size: 18px; font-weight: 800; color: %1;").arg(AppStyle::TextPrimary));
-    layout.addWidget(hdr);
+    QFrame *card = new QFrame(&dialog);
+    card->setObjectName("dialogCard");
+    card->setStyleSheet(AppStyle::dialogCardStyle());
+    AppStyle::applyElevation(card, 24, 8, 25);
 
-    QLineEdit titleEdit(book.title, &dialog);
+    QVBoxLayout *cardLayout = new QVBoxLayout(card);
+    cardLayout->setContentsMargins(28, 24, 28, 24);
+    cardLayout->setSpacing(14);
+
+    // Header row with icon and close button
+    QHBoxLayout *hdrRow = new QHBoxLayout();
+    hdrRow->setSpacing(12);
+
+    QLabel *iconLabel = new QLabel(card);
+    iconLabel->setFixedSize(40, 40);
+    iconLabel->setAlignment(Qt::AlignCenter);
+    iconLabel->setText("✏️");
+    iconLabel->setStyleSheet(QString(R"(
+        background-color: %1;
+        border-radius: 20px;
+        font-size: 18px;
+    )").arg(AppStyle::PrimaryLight));
+    hdrRow->addWidget(iconLabel);
+
+    QVBoxLayout *titleBox = new QVBoxLayout();
+    titleBox->setSpacing(2);
+    QLabel *hdr = new QLabel("Edit Book Listing", card);
+    hdr->setStyleSheet(AppStyle::dialogHeaderStyle());
+    QLabel *subHdr = new QLabel("Update pricing, details, or listing condition", card);
+    subHdr->setStyleSheet(AppStyle::dialogSubheaderStyle());
+    titleBox->addWidget(hdr);
+    titleBox->addWidget(subHdr);
+    hdrRow->addLayout(titleBox, 1);
+
+    QPushButton *xBtn = new QPushButton("✕", card);
+    xBtn->setCursor(Qt::PointingHandCursor);
+    xBtn->setFixedSize(28, 28);
+    xBtn->setStyleSheet(R"(
+        QPushButton {
+            background-color: #F1F5F9;
+            color: #64748B;
+            border: none;
+            border-radius: 14px;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        QPushButton:hover {
+            background-color: #E2E8F0;
+            color: #0F172A;
+        }
+    )");
+    connect(xBtn, &QPushButton::clicked, &dialog, &QDialog::reject);
+    hdrRow->addWidget(xBtn, 0, Qt::AlignTop);
+
+    cardLayout->addLayout(hdrRow);
+
+    // Divider
+    QFrame *divider = new QFrame(card);
+    divider->setFrameShape(QFrame::HLine);
+    divider->setStyleSheet("background-color: #E2E8F0; max-height: 1px; border: none;");
+    cardLayout->addWidget(divider);
+
+    QLineEdit titleEdit(book.title, card);
     titleEdit.setStyleSheet(AppStyle::inputStyle());
 
-    QLineEdit authorEdit(book.author, &dialog);
+    QLineEdit authorEdit(book.author, card);
     authorEdit.setStyleSheet(AppStyle::inputStyle());
 
-    QLineEdit priceEdit(QString::number(book.price, 'f', 0), &dialog);
+    QLineEdit priceEdit(QString::number(book.price, 'f', 0), card);
     priceEdit.setStyleSheet(AppStyle::inputStyle());
 
-    QComboBox categoryCombo(&dialog);
+    QComboBox categoryCombo(card);
+    categoryCombo.setCursor(Qt::PointingHandCursor);
     categoryCombo.setStyleSheet(AppStyle::comboBoxStyle());
     categoryCombo.addItems({"Fiction", "Non-Fiction", "Academic", "Programming", "Engineering", "Competitive Exams", "School", "Novels", "Other"});
     int cIdx = categoryCombo.findText(book.category);
     if (cIdx >= 0) categoryCombo.setCurrentIndex(cIdx);
 
-    QComboBox conditionCombo(&dialog);
+    QComboBox conditionCombo(card);
+    conditionCombo.setCursor(Qt::PointingHandCursor);
     conditionCombo.setStyleSheet(AppStyle::comboBoxStyle());
     conditionCombo.addItems({"New", "Like New", "Very Good", "Good", "Acceptable"});
     int condIdx = conditionCombo.findText(book.condition);
     if (condIdx >= 0) conditionCombo.setCurrentIndex(condIdx);
 
-    QTextEdit descEdit(&dialog);
+    QTextEdit descEdit(card);
     descEdit.setStyleSheet(AppStyle::inputStyle());
     descEdit.setPlainText(book.description);
-    descEdit.setMaximumHeight(90);
+    descEdit.setMaximumHeight(80);
 
-    QLineEdit imageEdit(book.coverImage, &dialog);
+    QLineEdit imageEdit(book.coverImage, card);
     imageEdit.setStyleSheet(AppStyle::inputStyle());
 
-    auto addField = [&layout](const QString &label, QWidget *widget) {
-        QLabel *lbl = new QLabel(label);
-        lbl->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: 600;").arg(AppStyle::TextSecondary));
-        layout.addWidget(lbl);
-        layout.addWidget(widget);
+    auto addField = [card, cardLayout](const QString &label, QWidget *widget) {
+        QLabel *lbl = new QLabel(label, card);
+        lbl->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: 700;").arg(AppStyle::TextSecondary));
+        cardLayout->addWidget(lbl);
+        cardLayout->addWidget(widget);
     };
 
     addField("Title:", &titleEdit);
@@ -619,18 +678,27 @@ void ListingsWindow::handleEditListing(const BookModel &book)
     addField("Description:", &descEdit);
     addField("Cover Image Path / URL:", &imageEdit);
 
-    QHBoxLayout btnRow;
-    btnRow.addStretch();
-    QPushButton cancelBtn("Cancel", &dialog);
+    QHBoxLayout *btnRow = new QHBoxLayout();
+    btnRow->setSpacing(12);
+
+    QPushButton cancelBtn("Cancel", card);
+    cancelBtn.setCursor(Qt::PointingHandCursor);
+    cancelBtn.setFixedHeight(40);
     cancelBtn.setStyleSheet(AppStyle::secondaryButtonStyle());
     connect(&cancelBtn, &QPushButton::clicked, &dialog, &QDialog::reject);
-    btnRow.addWidget(&cancelBtn);
+    btnRow->addWidget(&cancelBtn, 1);
 
-    QPushButton saveBtn("Save Changes", &dialog);
+    QPushButton saveBtn("Save Changes", card);
+    saveBtn.setCursor(Qt::PointingHandCursor);
+    saveBtn.setFixedHeight(40);
     saveBtn.setStyleSheet(AppStyle::primaryButtonStyle());
     connect(&saveBtn, &QPushButton::clicked, &dialog, &QDialog::accept);
-    btnRow.addWidget(&saveBtn);
-    layout.addLayout(&btnRow);
+    btnRow->addWidget(&saveBtn, 1);
+    cardLayout->addLayout(btnRow);
+
+    rootLayout.addWidget(card);
+    dialog.setFixedWidth(540);
+    dialog.adjustSize();
 
     if (dialog.exec() == QDialog::Accepted) {
         QJsonObject body;
@@ -660,50 +728,119 @@ void ListingsWindow::handleEditListing(const BookModel &book)
 void ListingsWindow::handleEditReview(const ReviewModel &rev)
 {
     QDialog dialog(this);
-    dialog.setWindowTitle("Edit Review");
-    dialog.resize(450, 300);
-    dialog.setStyleSheet(QString("background-color: %1;").arg(AppStyle::Background));
+    dialog.setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+    dialog.setAttribute(Qt::WA_TranslucentBackground);
+    dialog.setModal(true);
 
-    QVBoxLayout layout(&dialog);
-    layout.setSpacing(14);
-    layout.setContentsMargins(28, 24, 28, 24);
+    QVBoxLayout rootLayout(&dialog);
+    rootLayout.setContentsMargins(16, 16, 16, 16);
 
-    QLabel *hdr = new QLabel("Update Your Review", &dialog);
-    hdr->setStyleSheet(QString("font-size: 18px; font-weight: 800; color: %1;").arg(AppStyle::TextPrimary));
-    layout.addWidget(hdr);
+    QFrame *card = new QFrame(&dialog);
+    card->setObjectName("dialogCard");
+    card->setStyleSheet(AppStyle::dialogCardStyle());
+    AppStyle::applyElevation(card, 24, 8, 25);
 
-    QLabel *rateLbl = new QLabel("Rating (1-5 stars):", &dialog);
-    rateLbl->setStyleSheet(QString("color: %1; font-size: 13px; font-weight: 600;").arg(AppStyle::TextSecondary));
-    layout.addWidget(rateLbl);
+    QVBoxLayout *cardLayout = new QVBoxLayout(card);
+    cardLayout->setContentsMargins(28, 24, 28, 24);
+    cardLayout->setSpacing(14);
 
-    QSpinBox ratingSpin(&dialog);
+    // Header row with icon and close button
+    QHBoxLayout *hdrRow = new QHBoxLayout();
+    hdrRow->setSpacing(12);
+
+    QLabel *iconLabel = new QLabel(card);
+    iconLabel->setFixedSize(40, 40);
+    iconLabel->setAlignment(Qt::AlignCenter);
+    iconLabel->setText("★");
+    iconLabel->setStyleSheet(QString(R"(
+        background-color: %1;
+        color: %2;
+        border-radius: 20px;
+        font-size: 18px;
+    )").arg(AppStyle::WarningLight, AppStyle::Warning));
+    hdrRow->addWidget(iconLabel);
+
+    QVBoxLayout *titleBox = new QVBoxLayout();
+    titleBox->setSpacing(2);
+    QLabel *hdr = new QLabel("Update Your Review", card);
+    hdr->setStyleSheet(AppStyle::dialogHeaderStyle());
+    QLabel *subHdr = new QLabel("Share updated feedback and seller rating", card);
+    subHdr->setStyleSheet(AppStyle::dialogSubheaderStyle());
+    titleBox->addWidget(hdr);
+    titleBox->addWidget(subHdr);
+    hdrRow->addLayout(titleBox, 1);
+
+    QPushButton *xBtn = new QPushButton("✕", card);
+    xBtn->setCursor(Qt::PointingHandCursor);
+    xBtn->setFixedSize(28, 28);
+    xBtn->setStyleSheet(R"(
+        QPushButton {
+            background-color: #F1F5F9;
+            color: #64748B;
+            border: none;
+            border-radius: 14px;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        QPushButton:hover {
+            background-color: #E2E8F0;
+            color: #0F172A;
+        }
+    )");
+    connect(xBtn, &QPushButton::clicked, &dialog, &QDialog::reject);
+    hdrRow->addWidget(xBtn, 0, Qt::AlignTop);
+
+    cardLayout->addLayout(hdrRow);
+
+    // Divider
+    QFrame *divider = new QFrame(card);
+    divider->setFrameShape(QFrame::HLine);
+    divider->setStyleSheet("background-color: #E2E8F0; max-height: 1px; border: none;");
+    cardLayout->addWidget(divider);
+
+    QLabel *rateLbl = new QLabel("Rating (1-5 stars):", card);
+    rateLbl->setStyleSheet(QString("color: %1; font-size: 13px; font-weight: 700;").arg(AppStyle::TextSecondary));
+    cardLayout->addWidget(rateLbl);
+
+    QSpinBox ratingSpin(card);
     ratingSpin.setRange(1, 5);
     ratingSpin.setValue(rev.rating);
+    ratingSpin.setPrefix("★ ");
+    ratingSpin.setSuffix(" Stars");
     ratingSpin.setStyleSheet(AppStyle::inputStyle());
-    layout.addWidget(&ratingSpin);
+    cardLayout->addWidget(&ratingSpin);
 
-    QLabel *commentLbl = new QLabel("Your Comment:", &dialog);
-    commentLbl->setStyleSheet(QString("color: %1; font-size: 13px; font-weight: 600;").arg(AppStyle::TextSecondary));
-    layout.addWidget(commentLbl);
+    QLabel *commentLbl = new QLabel("Your Comment:", card);
+    commentLbl->setStyleSheet(QString("color: %1; font-size: 13px; font-weight: 700;").arg(AppStyle::TextSecondary));
+    cardLayout->addWidget(commentLbl);
 
-    QTextEdit commentEdit(&dialog);
+    QTextEdit commentEdit(card);
     commentEdit.setStyleSheet(AppStyle::inputStyle());
     commentEdit.setPlainText(rev.comment);
-    commentEdit.setMaximumHeight(100);
-    layout.addWidget(&commentEdit);
+    commentEdit.setMaximumHeight(90);
+    cardLayout->addWidget(&commentEdit);
 
-    QHBoxLayout btnRow;
-    btnRow.addStretch();
-    QPushButton cancelBtn("Cancel", &dialog);
+    QHBoxLayout *btnRow = new QHBoxLayout();
+    btnRow->setSpacing(12);
+
+    QPushButton cancelBtn("Cancel", card);
+    cancelBtn.setCursor(Qt::PointingHandCursor);
+    cancelBtn.setFixedHeight(40);
     cancelBtn.setStyleSheet(AppStyle::secondaryButtonStyle());
     connect(&cancelBtn, &QPushButton::clicked, &dialog, &QDialog::reject);
-    btnRow.addWidget(&cancelBtn);
+    btnRow->addWidget(&cancelBtn, 1);
 
-    QPushButton saveBtn("Update Review", &dialog);
+    QPushButton saveBtn("Update Review", card);
+    saveBtn.setCursor(Qt::PointingHandCursor);
+    saveBtn.setFixedHeight(40);
     saveBtn.setStyleSheet(AppStyle::primaryButtonStyle());
     connect(&saveBtn, &QPushButton::clicked, &dialog, &QDialog::accept);
-    btnRow.addWidget(&saveBtn);
-    layout.addLayout(&btnRow);
+    btnRow->addWidget(&saveBtn, 1);
+    cardLayout->addLayout(btnRow);
+
+    rootLayout.addWidget(card);
+    dialog.setFixedWidth(480);
+    dialog.adjustSize();
 
     if (dialog.exec() == QDialog::Accepted) {
         QJsonObject body;

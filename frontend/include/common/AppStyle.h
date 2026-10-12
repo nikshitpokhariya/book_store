@@ -64,6 +64,9 @@ public:
     static QString scrollBarStyle();
     static QString activeTabStyle();
     static QString inactiveTabStyle();
+    static QString dialogCardStyle();
+    static QString dialogHeaderStyle();
+    static QString dialogSubheaderStyle();
 
     // Elevation / shadow helper
     static void applyElevation(QWidget *widget, int blurRadius = 20, int yOffset = 4, int alpha = 25);

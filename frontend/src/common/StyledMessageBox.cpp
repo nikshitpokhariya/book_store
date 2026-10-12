@@ -149,6 +149,19 @@ void StyledMessageBox::setupUI(Type type,
     adjustSize();
 }
 
+void StyledMessageBox::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Escape) {
+        reject();
+        return;
+    } else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+        accept();
+        return;
+    }
+    QDialog::keyPressEvent(event);
+}
+
+
 void StyledMessageBox::information(QWidget *parent, const QString &title, const QString &message)
 {
     StyledMessageBox box(Info, title, message, parent);

@@ -21,6 +21,9 @@ QString AppStyle::baseWindowStyle()
             border: none;
             background-color: %3;
         }
+        QPushButton, QToolButton {
+            cursor: pointer;
+        }
     )").arg(appFont(), TextPrimary, Background);
 }
 
@@ -35,6 +38,7 @@ QString AppStyle::primaryButtonStyle()
             font-size: 13px;
             font-weight: 600;
             padding: 8px 16px;
+            cursor: pointer;
         }
         QPushButton:hover {
             background-color: %2;
@@ -42,11 +46,15 @@ QString AppStyle::primaryButtonStyle()
         QPushButton:pressed {
             background-color: %3;
         }
-        QPushButton:disabled {
-            background-color: %4;
-            color: %5;
+        QPushButton:focus {
+            border: 2px solid %4;
         }
-    )").arg(Primary, PrimaryHover, PrimaryActive, BorderSubtle, TextMuted);
+        QPushButton:disabled {
+            background-color: %5;
+            color: %6;
+            cursor: default;
+        }
+    )").arg(Primary, PrimaryHover, PrimaryActive, PrimaryBorder, BorderSubtle, TextMuted);
 }
 
 QString AppStyle::secondaryButtonStyle()
@@ -60,6 +68,7 @@ QString AppStyle::secondaryButtonStyle()
             font-size: 13px;
             font-weight: 600;
             padding: 8px 16px;
+            cursor: pointer;
         }
         QPushButton:hover {
             background-color: %4;
@@ -68,12 +77,16 @@ QString AppStyle::secondaryButtonStyle()
         QPushButton:pressed {
             background-color: %3;
         }
-        QPushButton:disabled {
-            background-color: %6;
-            color: %7;
-            border-color: %6;
+        QPushButton:focus {
+            border: 1.5px solid %6;
         }
-    )").arg(Surface, TextPrimary, BorderSubtle, SurfaceSubtle, BorderStrong, SurfaceSubtle, TextMuted);
+        QPushButton:disabled {
+            background-color: %7;
+            color: %8;
+            border-color: %7;
+            cursor: default;
+        }
+    )").arg(Surface, TextPrimary, BorderSubtle, SurfaceSubtle, BorderStrong, Primary, SurfaceSubtle, TextMuted);
 }
 
 QString AppStyle::ghostButtonStyle()
@@ -87,6 +100,7 @@ QString AppStyle::ghostButtonStyle()
             font-size: 13px;
             font-weight: 600;
             padding: 8px 14px;
+            cursor: pointer;
         }
         QPushButton:hover {
             color: %2;
@@ -95,7 +109,10 @@ QString AppStyle::ghostButtonStyle()
         QPushButton:pressed {
             background-color: #E0E7FF;
         }
-    )").arg(TextSecondary, Primary, PrimaryLight);
+        QPushButton:focus {
+            border: 1.5px solid %4;
+        }
+    )").arg(TextSecondary, Primary, PrimaryLight, PrimaryBorder);
 }
 
 QString AppStyle::dangerButtonStyle()
@@ -109,6 +126,7 @@ QString AppStyle::dangerButtonStyle()
             font-size: 13px;
             font-weight: 600;
             padding: 8px 16px;
+            cursor: pointer;
         }
         QPushButton:hover {
             background-color: %2;
@@ -116,7 +134,10 @@ QString AppStyle::dangerButtonStyle()
         QPushButton:pressed {
             background-color: #991B1B;
         }
-    )").arg(Danger, DangerHover);
+        QPushButton:focus {
+            border: 2px solid %3;
+        }
+    )").arg(Danger, DangerHover, DangerBorder);
 }
 
 QString AppStyle::inputStyle()
@@ -317,7 +338,7 @@ QString AppStyle::scrollBarStyle()
         }
         QScrollBar::handle:vertical {
             background: #CBD5E1;
-            min-height: 20px;
+            min-height: 24px;
             border-radius: 4px;
         }
         QScrollBar::handle:vertical:hover {
@@ -325,6 +346,23 @@ QString AppStyle::scrollBarStyle()
         }
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
             height: 0px;
+        }
+        QScrollBar:horizontal {
+            border: none;
+            background: #F8FAFC;
+            height: 8px;
+            margin: 0px;
+        }
+        QScrollBar::handle:horizontal {
+            background: #CBD5E1;
+            min-width: 24px;
+            border-radius: 4px;
+        }
+        QScrollBar::handle:horizontal:hover {
+            background: #94A3B8;
+        }
+        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+            width: 0px;
         }
     )");
 }
@@ -340,6 +378,7 @@ QString AppStyle::activeTabStyle()
             font-size: 13px;
             font-weight: 700;
             padding: 8px 18px;
+            cursor: pointer;
         }
     )").arg(Primary);
 }
@@ -355,6 +394,7 @@ QString AppStyle::inactiveTabStyle()
             font-size: 13px;
             font-weight: 600;
             padding: 8px 18px;
+            cursor: pointer;
         }
         QPushButton:hover {
             background-color: %3;
@@ -380,3 +420,25 @@ void AppStyle::applyElevation(QWidget *widget, int blurRadius, int yOffset, int 
     shadow->setColor(QColor(15, 23, 42, alpha));
     widget->setGraphicsEffect(shadow);
 }
+
+QString AppStyle::dialogCardStyle()
+{
+    return QString(R"(
+        #dialogCard, #cancelCard {
+            background-color: #FFFFFF;
+            border: 1px solid %1;
+            border-radius: 16px;
+        }
+    )").arg(BorderSubtle);
+}
+
+QString AppStyle::dialogHeaderStyle()
+{
+    return QString("color: %1; font-size: 18px; font-weight: 800;").arg(TextPrimary);
+}
+
+QString AppStyle::dialogSubheaderStyle()
+{
+    return QString("color: %1; font-size: 13px; line-height: 1.4;").arg(TextSecondary);
+}
+

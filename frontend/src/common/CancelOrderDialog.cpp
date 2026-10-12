@@ -8,6 +8,7 @@
 #include <QComboBox>
 #include <QTextEdit>
 #include <QFrame>
+#include <QKeyEvent>
 
 CancelOrderDialog::CancelOrderDialog(Mode mode, const QString &referenceText, QWidget *parent)
     : QDialog(parent),
@@ -267,6 +268,15 @@ void CancelOrderDialog::setupUI(Mode mode, const QString &referenceText)
 
     setFixedSize(500, card->sizeHint().height() + 32);
     rootLayout->addWidget(card);
+}
+
+void CancelOrderDialog::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Escape) {
+        reject();
+        return;
+    }
+    QDialog::keyPressEvent(event);
 }
 
 QString CancelOrderDialog::reason() const

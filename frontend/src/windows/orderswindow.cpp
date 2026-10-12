@@ -10,6 +10,7 @@
 #include <QPushButton>
 #include <QFrame>
 #include <QScrollArea>
+#include <QShortcut>
 #include <QFileInfo>
 #include <QPixmap>
 #include <QPainter>
@@ -91,6 +92,22 @@ void OrdersWindow::setupUI()
     scrollArea->setWidget(content);
     mainLayout->addWidget(scrollArea, 1);
     mainLayout->addWidget(createPaginationBar());
+
+    auto *escSc = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+    connect(escSc, &QShortcut::activated, this, &OrdersWindow::handleBack);
+
+    auto *refreshSc = new QShortcut(QKeySequence::Refresh, this);
+    connect(refreshSc, &QShortcut::activated, this, &OrdersWindow::loadOrders);
+
+    auto *prevSc = new QShortcut(QKeySequence(Qt::Key_BracketLeft), this);
+    connect(prevSc, &QShortcut::activated, this, [this]() {
+        if (prevPageBtn && prevPageBtn->isEnabled()) handlePrevPage();
+    });
+
+    auto *nextSc = new QShortcut(QKeySequence(Qt::Key_BracketRight), this);
+    connect(nextSc, &QShortcut::activated, this, [this]() {
+        if (nextPageBtn && nextPageBtn->isEnabled()) handleNextPage();
+    });
 }
 
 QWidget* OrdersWindow::createTopBar()

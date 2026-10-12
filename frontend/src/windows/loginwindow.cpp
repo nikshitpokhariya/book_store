@@ -24,6 +24,7 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QFrame>
+#include <QShortcut>
 
 LoginWindow::LoginWindow(QWidget *parent)
     : QWidget(parent),

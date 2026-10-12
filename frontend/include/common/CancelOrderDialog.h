@@ -26,6 +26,9 @@ public:
 
     QString reason() const;
 
+protected:
+    void keyPressEvent(QKeyEvent *event) override;
+
 private:
     void setupUI(Mode mode, const QString &referenceText);
 

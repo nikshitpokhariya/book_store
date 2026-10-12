@@ -83,6 +83,12 @@ void OrderDetailWindow::setupUI()
 
     scroll->setWidget(content);
     mainLayout->addWidget(scroll, 1);
+
+    auto *escSc = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+    connect(escSc, &QShortcut::activated, this, &OrderDetailWindow::backRequested);
+
+    auto *refreshSc = new QShortcut(QKeySequence::Refresh, this);
+    connect(refreshSc, &QShortcut::activated, this, &OrderDetailWindow::loadOrder);
 }
 
 QWidget* OrderDetailWindow::createTopBar()
@@ -655,33 +661,79 @@ void OrderDetailWindow::handleWriteReview(const QString &bookId, const QString &
     }
 
     QDialog dialog(this);
-    dialog.setWindowTitle("Rate & Review Seller");
-    dialog.resize(520, 560);
-    dialog.setStyleSheet(QString("background-color: %1;").arg(AppStyle::Background));
+    dialog.setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+    dialog.setAttribute(Qt::WA_TranslucentBackground);
+    dialog.setModal(true);
 
-    auto *layout = new QVBoxLayout(&dialog);
-    layout->setContentsMargins(28, 24, 28, 24);
-    layout->setSpacing(14);
+    auto *rootLayout = new QVBoxLayout(&dialog);
+    rootLayout->setContentsMargins(16, 16, 16, 16);
 
     QFrame *card = new QFrame(&dialog);
-    card->setStyleSheet(AppStyle::cardStyle());
-    AppStyle::applyElevation(card, 16, 4, 12);
+    card->setObjectName("dialogCard");
+    card->setStyleSheet(AppStyle::dialogCardStyle());
+    AppStyle::applyElevation(card, 24, 8, 25);
 
     auto *cLayout = new QVBoxLayout(card);
-    cLayout->setContentsMargins(22, 20, 22, 20);
-    cLayout->setSpacing(12);
+    cLayout->setContentsMargins(28, 24, 28, 24);
+    cLayout->setSpacing(14);
 
+    // Header row with icon and close button
+    QHBoxLayout *hdrRow = new QHBoxLayout();
+    hdrRow->setSpacing(12);
+
+    QLabel *iconLabel = new QLabel(card);
+    iconLabel->setFixedSize(40, 40);
+    iconLabel->setAlignment(Qt::AlignCenter);
+    iconLabel->setText("★");
+    iconLabel->setStyleSheet(QString(R"(
+        background-color: %1;
+        color: %2;
+        border-radius: 20px;
+        font-size: 18px;
+    )").arg(AppStyle::WarningLight, AppStyle::Warning));
+    hdrRow->addWidget(iconLabel);
+
+    QVBoxLayout *titleBox = new QVBoxLayout();
+    titleBox->setSpacing(2);
     auto *tLabel = new QLabel(QString("Rate Seller: %1").arg(sellerName), card);
-    tLabel->setStyleSheet(QString("font-size: 17px; font-weight: 800; color: %1;").arg(AppStyle::TextPrimary));
-    cLayout->addWidget(tLabel);
+    tLabel->setStyleSheet(AppStyle::dialogHeaderStyle());
+    auto *subLabel = new QLabel(QString("Book: %1").arg(bookTitle), card);
+    subLabel->setStyleSheet(AppStyle::dialogSubheaderStyle());
+    titleBox->addWidget(tLabel);
+    titleBox->addWidget(subLabel);
+    hdrRow->addLayout(titleBox, 1);
 
-    auto *subLabel = new QLabel(QString("Book Received: %1").arg(bookTitle), card);
-    subLabel->setStyleSheet(QString("font-size: 12px; color: %1;").arg(AppStyle::TextSecondary));
-    cLayout->addWidget(subLabel);
+    QPushButton *xBtn = new QPushButton("✕", card);
+    xBtn->setCursor(Qt::PointingHandCursor);
+    xBtn->setFixedSize(28, 28);
+    xBtn->setStyleSheet(R"(
+        QPushButton {
+            background-color: #F1F5F9;
+            color: #64748B;
+            border: none;
+            border-radius: 14px;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        QPushButton:hover {
+            background-color: #E2E8F0;
+            color: #0F172A;
+        }
+    )");
+    connect(xBtn, &QPushButton::clicked, &dialog, &QDialog::reject);
+    hdrRow->addWidget(xBtn, 0, Qt::AlignTop);
 
-    auto *descLabel = new QLabel("Share your experience with the seller's packaging, delivery speed, and the accuracy of the book condition.", card);
+    cLayout->addLayout(hdrRow);
+
+    // Divider
+    QFrame *divider = new QFrame(card);
+    divider->setFrameShape(QFrame::HLine);
+    divider->setStyleSheet("background-color: #E2E8F0; max-height: 1px; border: none;");
+    cLayout->addWidget(divider);
+
+    auto *descLabel = new QLabel("Share your experience with the seller's packaging, delivery speed, and condition accuracy.", card);
     descLabel->setWordWrap(true);
-    descLabel->setStyleSheet(QString("font-size: 12px; color: %1;").arg(AppStyle::TextMuted));
+    descLabel->setStyleSheet(QString("font-size: 12.5px; color: %1;").arg(AppStyle::TextMuted));
     cLayout->addWidget(descLabel);
 
     auto *rRow = new QHBoxLayout();
@@ -705,7 +757,7 @@ void OrderDetailWindow::handleWriteReview(const QString &bookId, const QString &
     auto *commentEdit = new QTextEdit(card);
     commentEdit->setPlaceholderText("Describe the condition of the book you received, packaging quality, and seller communication...");
     commentEdit->setStyleSheet(AppStyle::inputStyle());
-    commentEdit->setMaximumHeight(90);
+    commentEdit->setMaximumHeight(85);
     cLayout->addWidget(commentEdit);
 
     // Photos of received condition
@@ -763,21 +815,26 @@ void OrderDetailWindow::handleWriteReview(const QString &bookId, const QString &
         updatePhotosUI();
     });
 
-    layout->addWidget(card);
-
     auto *btnRow = new QHBoxLayout();
-    btnRow->addStretch();
-    auto *cancelBtn = new QPushButton("Cancel", &dialog);
+    btnRow->setSpacing(12);
+
+    auto *cancelBtn = new QPushButton("Cancel", card);
     cancelBtn->setCursor(Qt::PointingHandCursor);
+    cancelBtn->setFixedHeight(40);
     cancelBtn->setStyleSheet(AppStyle::secondaryButtonStyle());
     connect(cancelBtn, &QPushButton::clicked, &dialog, &QDialog::reject);
-    btnRow->addWidget(cancelBtn);
+    btnRow->addWidget(cancelBtn, 1);
 
-    auto *subBtn = new QPushButton("Submit Seller Review", &dialog);
+    auto *subBtn = new QPushButton("Submit Seller Review", card);
     subBtn->setCursor(Qt::PointingHandCursor);
+    subBtn->setFixedHeight(40);
     subBtn->setStyleSheet(AppStyle::primaryButtonStyle());
-    btnRow->addWidget(subBtn);
-    layout->addLayout(btnRow);
+    btnRow->addWidget(subBtn, 1);
+    cLayout->addLayout(btnRow);
+
+    rootLayout->addWidget(card);
+    dialog.setFixedWidth(540);
+    dialog.adjustSize();
 
     connect(subBtn, &QPushButton::clicked, [&dialog, bookId, rSpin, commentEdit, &attachedPhotoPaths, subBtn, this]() {
         QString comment = commentEdit->toPlainText().trimmed();

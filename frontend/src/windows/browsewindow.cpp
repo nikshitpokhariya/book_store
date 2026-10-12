@@ -144,6 +144,19 @@ void BrowseWindow::setupUI()
         }
         handleBack();
     });
+
+    auto *refreshSc = new QShortcut(QKeySequence::Refresh, this);
+    connect(refreshSc, &QShortcut::activated, this, &BrowseWindow::loadBooks);
+
+    auto *prevSc = new QShortcut(QKeySequence(Qt::Key_BracketLeft), this);
+    connect(prevSc, &QShortcut::activated, this, [this]() {
+        if (prevPageButton && prevPageButton->isEnabled()) handlePrevPage();
+    });
+
+    auto *nextSc = new QShortcut(QKeySequence(Qt::Key_BracketRight), this);
+    connect(nextSc, &QShortcut::activated, this, [this]() {
+        if (nextPageButton && nextPageButton->isEnabled()) handleNextPage();
+    });
 }
 
 QWidget* BrowseWindow::createTopBar()

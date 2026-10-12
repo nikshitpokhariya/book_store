@@ -8,6 +8,7 @@
 #include <QComboBox>
 #include <QTextEdit>
 #include <QFrame>
+#include <QKeyEvent>
 
 ProposeExchangeDialog::ProposeExchangeDialog(const BookModel &requestedBook,
                                              const QVector<BookModel> &userBooks,
@@ -252,6 +253,15 @@ void ProposeExchangeDialog::setupUI(const BookModel &requestedBook, const QVecto
 
     setFixedSize(540, card->sizeHint().height() + 32);
     rootLayout->addWidget(card);
+}
+
+void ProposeExchangeDialog::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Escape) {
+        reject();
+        return;
+    }
+    QDialog::keyPressEvent(event);
 }
 
 void ProposeExchangeDialog::onBookSelectionChanged(int index)

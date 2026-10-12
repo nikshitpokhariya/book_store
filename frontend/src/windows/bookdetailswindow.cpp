@@ -692,6 +692,16 @@ void BookDetailsWindow::setupShortcuts()
             }
         }
     });
+
+    auto *inspectSc = new QShortcut(QKeySequence(Qt::Key_I), this, nullptr, nullptr, Qt::WindowShortcut);
+    connect(inspectSc, &QShortcut::activated, this, [this]() {
+        if (currentMediaIndex_ >= 0 && currentMediaIndex_ < mediaItems_.size() && !mediaItems_[currentMediaIndex_].isVideo) {
+            openImageInspection();
+        }
+    });
+
+    auto *refreshSc = new QShortcut(QKeySequence::Refresh, this, nullptr, nullptr, Qt::WindowShortcut);
+    connect(refreshSc, &QShortcut::activated, this, &BookDetailsWindow::loadBook);
 }
 
 void BookDetailsWindow::updatePreviewOverlayPositions()
@@ -1033,15 +1043,59 @@ bool BookDetailsWindow::eventFilter(QObject *obj, QEvent *event)
         if (obj && obj->property("fullImageUrl").isValid()) {
             QString url = obj->property("fullImageUrl").toString();
             QDialog previewDlg(this);
-            previewDlg.setWindowTitle("Delivered Condition Photo");
-            previewDlg.resize(540, 540);
-            previewDlg.setStyleSheet("background-color: #0F172A;");
-            QVBoxLayout *vbox = new QVBoxLayout(&previewDlg);
-            vbox->setContentsMargins(16, 16, 16, 16);
-            QLabel *imgLbl = new QLabel(&previewDlg);
+            previewDlg.setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+            previewDlg.setAttribute(Qt::WA_TranslucentBackground);
+            previewDlg.setModal(true);
+
+            QVBoxLayout *rootLayout = new QVBoxLayout(&previewDlg);
+            rootLayout->setContentsMargins(16, 16, 16, 16);
+
+            QFrame *card = new QFrame(&previewDlg);
+            card->setStyleSheet(R"(
+                background-color: #0F172A;
+                border: 1px solid #334155;
+                border-radius: 16px;
+            )");
+            AppStyle::applyElevation(card, 24, 8, 25);
+
+            QVBoxLayout *cardLayout = new QVBoxLayout(card);
+            cardLayout->setContentsMargins(16, 12, 16, 16);
+            cardLayout->setSpacing(12);
+
+            QHBoxLayout *topRow = new QHBoxLayout();
+            QLabel *title = new QLabel("Delivered Condition Photo", card);
+            title->setStyleSheet("color: #FFFFFF; font-size: 15px; font-weight: 700;");
+            topRow->addWidget(title);
+            topRow->addStretch();
+
+            QPushButton *closeBtn = new QPushButton("✕", card);
+            closeBtn->setCursor(Qt::PointingHandCursor);
+            closeBtn->setFixedSize(28, 28);
+            closeBtn->setStyleSheet(R"(
+                QPushButton {
+                    background-color: rgba(255, 255, 255, 0.1);
+                    color: #FFFFFF;
+                    border: none;
+                    border-radius: 14px;
+                    font-size: 13px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: rgba(255, 255, 255, 0.2);
+                }
+            )");
+            connect(closeBtn, &QPushButton::clicked, &previewDlg, &QDialog::accept);
+            topRow->addWidget(closeBtn);
+            cardLayout->addLayout(topRow);
+
+            QLabel *imgLbl = new QLabel(card);
             imgLbl->setAlignment(Qt::AlignCenter);
-            ImageLoader::instance().load(url, imgLbl, QSize(500, 500));
-            vbox->addWidget(imgLbl);
+            imgLbl->setStyleSheet("background-color: #070A11; border-radius: 8px;");
+            ImageLoader::instance().load(url, imgLbl, QSize(520, 520));
+            cardLayout->addWidget(imgLbl);
+
+            rootLayout->addWidget(card);
+            previewDlg.adjustSize();
             previewDlg.exec();
             return true;
         }

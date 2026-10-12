@@ -39,6 +39,9 @@ public:
                          const QString &cancelText = "Cancel");
     static bool confirm(QWidget *parent, const QString &title, const QString &message);
 
+protected:
+    void keyPressEvent(QKeyEvent *event) override;
+
 private:
     void setupUI(Type type,
                  const QString &title,

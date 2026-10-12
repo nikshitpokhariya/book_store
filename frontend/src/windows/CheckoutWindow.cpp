@@ -13,6 +13,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QFrame>
+#include <QShortcut>
 #include "StyledMessageBox.h"
 #include <QNetworkReply>
 
@@ -81,6 +82,14 @@ void CheckoutWindow::setupUI()
 
     scroll->setWidget(scrollContent);
     mainLayout->addWidget(scroll, 1);
+
+    auto *escSc = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+    connect(escSc, &QShortcut::activated, this, &CheckoutWindow::backRequested);
+
+    auto *orderSc = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return), this);
+    connect(orderSc, &QShortcut::activated, this, [this]() {
+        if (placeOrderButton && placeOrderButton->isEnabled()) handlePlaceOrder();
+    });
 }
 
 QWidget* CheckoutWindow::createTopBar()

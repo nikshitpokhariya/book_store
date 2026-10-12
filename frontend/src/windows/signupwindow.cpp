@@ -9,6 +9,7 @@
 #include <QLabel>
 #include "StyledMessageBox.h"
 #include <QFrame>
+#include <QShortcut>
 #include <QRegularExpression>
 #include <QJsonObject>
 #include <QNetworkReply>
@@ -93,6 +94,17 @@ SignupWindow::SignupWindow(QWidget *parent)
 
     connect(signupButton, &QPushButton::clicked, this, &SignupWindow::handleSignup);
     connect(backButton, &QPushButton::clicked, this, [this]() {
+        emit backRequested();
+        close();
+    });
+
+    connect(usernameEdit, &QLineEdit::returnPressed, this, [this]() { emailEdit->setFocus(); });
+    connect(emailEdit, &QLineEdit::returnPressed, this, [this]() { passwordEdit->setFocus(); });
+    connect(passwordEdit, &QLineEdit::returnPressed, this, [this]() { confirmPasswordEdit->setFocus(); });
+    connect(confirmPasswordEdit, &QLineEdit::returnPressed, this, &SignupWindow::handleSignup);
+
+    auto *escSc = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+    connect(escSc, &QShortcut::activated, this, [this]() {
         emit backRequested();
         close();
     });

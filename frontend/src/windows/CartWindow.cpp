@@ -10,6 +10,7 @@
 #include <QScrollArea>
 #include <QFrame>
 #include <QPainter>
+#include <QShortcut>
 #include "StyledMessageBox.h"
 #include <QFileInfo>
 #include <QNetworkReply>
@@ -113,6 +114,17 @@ void CartWindow::setupUI()
     bodyLayout->addWidget(createSummaryCard(), 1);
 
     mainLayout->addWidget(bodyWidget, 1);
+
+    auto *escSc = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+    connect(escSc, &QShortcut::activated, this, &CartWindow::backRequested);
+
+    auto *refreshSc = new QShortcut(QKeySequence::Refresh, this);
+    connect(refreshSc, &QShortcut::activated, this, &CartWindow::refreshCart);
+
+    auto *checkoutSc = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return), this);
+    connect(checkoutSc, &QShortcut::activated, this, [this]() {
+        if (checkoutButton && checkoutButton->isEnabled()) emit checkoutRequested();
+    });
 }
 
 QWidget* CartWindow::createTopBar()
