@@ -9,12 +9,14 @@ public:
   ADD_METHOD_TO(BookController::createListing, "/api/books", drogon::Post,
                 "AuthFilter");
 
-  ADD_METHOD_TO(BookController::browse, "/api/books", drogon::Get);
+  ADD_METHOD_TO(BookController::browse, "/api/books", drogon::Get,
+                "RateLimitFilter");
 
   ADD_METHOD_TO(BookController::getMyListings, "/api/books/my", drogon::Get,
                 "AuthFilter");
 
-  ADD_METHOD_TO(BookController::suggestions, "/api/books/suggestions", drogon::Get);
+  ADD_METHOD_TO(BookController::suggestions, "/api/books/suggestions",
+                drogon::Get, "RateLimitFilter");
 
   ADD_METHOD_TO(BookController::getById, "/api/books/{1}", drogon::Get);
 

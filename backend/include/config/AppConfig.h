@@ -19,6 +19,8 @@ public:
   std::int64_t refreshTokenLifetime() const;
 
   bool secureCookies() const;
+  bool isProduction() const;
+  bool allowStandaloneDev() const;
 
   const std::string &cloudinaryCloudName() const;
   const std::string &cloudinaryApiKey() const;
@@ -38,6 +40,8 @@ private:
   std::int64_t refreshTokenLifetime_;
 
   bool secureCookies_;
+  bool isProduction_{false};
+  bool allowStandaloneDev_{false};
 
   std::string cloudinaryCloudName_;
   std::string cloudinaryApiKey_;

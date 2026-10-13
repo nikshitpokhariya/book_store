@@ -248,8 +248,8 @@ QWidget* CheckoutWindow::createPaymentCard()
         return frame;
     };
 
-    layout->addWidget(createRadioRow(upiRadio, "UPI / QR Code (Instant)", "Pay via Google Pay, PhonePe, Paytm, or UPI ID", true));
-    layout->addWidget(createRadioRow(cardRadio, "Credit / Debit Card", "Visa, MasterCard, and RuPay cards supported", false));
+    layout->addWidget(createRadioRow(upiRadio, "UPI / QR Code (Demo Simulation)", "Simulated checkout — no real payment gateway is integrated", true));
+    layout->addWidget(createRadioRow(cardRadio, "Credit / Debit Card (Demo Simulation)", "Simulated checkout — no real payment gateway is integrated", false));
     layout->addWidget(createRadioRow(codRadio, "Cash on Delivery", "Pay in cash when your books are delivered at your doorstep", false));
 
     return card;
@@ -313,7 +313,7 @@ QWidget* CheckoutWindow::createSummaryCard()
     connect(placeOrderButton, &QPushButton::clicked, this, &CheckoutWindow::handlePlaceOrder);
     layout->addWidget(placeOrderButton);
 
-    auto *securityNote = new QLabel("🔒  100% Encrypted & Secure Checkout", card);
+    auto *securityNote = new QLabel("ℹ️  Demo Notice: UPI & Card payments are simulated. No real money is charged.", card);
     securityNote->setAlignment(Qt::AlignCenter);
     securityNote->setStyleSheet(QString("font-size: 12px; color: %1; font-weight: 600; margin-top: 4px;").arg(AppStyle::TextMuted));
     layout->addWidget(securityNote);
@@ -425,11 +425,15 @@ void CheckoutWindow::handlePlaceOrder()
 
         if (ok && json.contains(QStringLiteral("order"))) {
             OrderModel order = OrderModel::fromJson(json[QStringLiteral("order")].toObject());
+            QString paymentNote = (order.paymentStatus == QStringLiteral("simulated") || order.paymentMethod != QStringLiteral("COD"))
+                ? QStringLiteral("\n\nPayment Status: Simulated (Demo mode — no actual charge made).")
+                : QStringLiteral("\n\nPayment Status: Pending (Cash on Delivery).");
             StyledMessageBox::success(
-                this, "Order Placed Successfully",
-                QString("Congratulations! Your order #%1 has been placed successfully.\nTotal Amount: ₹%2")
+                this, "Order Placed (Demo Simulation)",
+                QString("Your order #%1 has been placed successfully.\nTotal Amount: ₹%2%3")
                     .arg(order.orderNumber)
                     .arg(order.total, 0, 'f', 2)
+                    .arg(paymentNote)
             );
             emit orderPlaced(order.id);
         } else {

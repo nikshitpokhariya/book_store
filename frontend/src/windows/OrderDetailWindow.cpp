@@ -461,9 +461,13 @@ void OrderDetailWindow::loadOrder()
                                          .arg(m_order.shippingAddress.postalCode)
                                          .arg(m_order.shippingAddress.phone));
 
+        QString displayPaymentStatus = m_order.paymentStatus;
+        if (m_order.paymentStatus.compare(QStringLiteral("simulated"), Qt::CaseInsensitive) == 0) {
+            displayPaymentStatus = QStringLiteral("Simulated (Demo - No real charge)");
+        }
         paymentDetailsLabel->setText(QString("Method: %1\nPayment Status: %2\nShipping Fee: ₹%3")
                                          .arg(m_order.paymentMethod)
-                                         .arg(m_order.paymentStatus)
+                                         .arg(displayPaymentStatus)
                                          .arg(m_order.shippingCost, 0, 'f', 2));
 
         totalAmountLabel->setText(QString("Total: ₹%1").arg(m_order.total, 0, 'f', 2));

@@ -157,6 +157,29 @@ ExchangeRepository::findById(const std::string &id) {
   return toExchangeRequest(result->view());
 }
 
+std::optional<ExchangeRequest>
+ExchangeRepository::findById(mongocxx::client_session &session,
+                             const std::string &id) {
+  bsoncxx::oid objectId;
+  try {
+    objectId = bsoncxx::oid{id};
+  } catch (const std::exception &) {
+    return std::nullopt;
+  }
+
+  auto collection = MongoDatabase::instance().database()["exchanges"];
+
+  document filter;
+  filter.append(kvp("_id", objectId));
+
+  auto result = collection.find_one(session, filter.view());
+  if (!result) {
+    return std::nullopt;
+  }
+
+  return toExchangeRequest(result->view());
+}
+
 PageResult<ExchangeRequest>
 ExchangeRepository::findByRequester(const std::string &requesterId, int page,
                                     int limit) {
@@ -278,7 +301,8 @@ ExchangeRepository::findUserHistory(const std::string &userId, int page,
 bool ExchangeRepository::updateStatus(const std::string &id,
                                       const std::string &newStatus,
                                       const std::string &note,
-                                      bool setCompletedAt) {
+                                      bool setCompletedAt,
+                                      const std::string &expectedStatus) {
   bsoncxx::oid objectId;
   try {
     objectId = bsoncxx::oid{id};
@@ -303,7 +327,48 @@ bool ExchangeRepository::updateStatus(const std::string &id,
 
   document filter;
   filter.append(kvp("_id", objectId));
+  if (!expectedStatus.empty()) {
+    filter.append(kvp("status", expectedStatus));
+  }
 
   auto result = collection.update_one(filter.view(), updateDoc.view());
+  return result && result->modified_count() > 0;
+}
+
+bool ExchangeRepository::updateStatus(mongocxx::client_session &session,
+                                      const std::string &id,
+                                      const std::string &newStatus,
+                                      const std::string &note,
+                                      bool setCompletedAt,
+                                      const std::string &expectedStatus) {
+  bsoncxx::oid objectId;
+  try {
+    objectId = bsoncxx::oid{id};
+  } catch (const std::exception &) {
+    return false;
+  }
+
+  auto collection = MongoDatabase::instance().database()["exchanges"];
+
+  const auto now = std::chrono::system_clock::now();
+
+  document setFields;
+  setFields.append(kvp("status", newStatus));
+  setFields.append(kvp("statusNote", note));
+  setFields.append(kvp("updatedAt", bsoncxx::types::b_date{now}));
+  if (setCompletedAt) {
+    setFields.append(kvp("completedAt", bsoncxx::types::b_date{now}));
+  }
+
+  document updateDoc;
+  updateDoc.append(kvp("$set", setFields.view()));
+
+  document filter;
+  filter.append(kvp("_id", objectId));
+  if (!expectedStatus.empty()) {
+    filter.append(kvp("status", expectedStatus));
+  }
+
+  auto result = collection.update_one(session, filter.view(), updateDoc.view());
   return result && result->modified_count() > 0;
 }

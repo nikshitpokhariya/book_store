@@ -503,6 +503,108 @@ bool BookRepository::exchangeOwnership(const std::string &requestedBookId,
   return true;
 }
 
+bool BookRepository::exchangeOwnership(mongocxx::client_session &session,
+                                       const std::string &requestedBookId,
+                                       const std::string &receiverId,
+                                       const std::string &offeredBookId,
+                                       const std::string &requesterId) {
+  bsoncxx::oid reqOid, offOid;
+  try {
+    reqOid = bsoncxx::oid{requestedBookId};
+    offOid = bsoncxx::oid{offeredBookId};
+  } catch (const std::exception &) {
+    return false;
+  }
+
+  auto collection = MongoDatabase::instance().database()["books"];
+  const auto now = std::chrono::system_clock::now();
+
+  // Phase 1: Acquire requested book conditionally inside session
+  document filterA;
+  filterA.append(kvp("_id", reqOid));
+  filterA.append(kvp("ownerId", receiverId));
+  filterA.append(kvp("status", "available"));
+
+  document setA;
+  setA.append(kvp("ownerId", requesterId));
+  setA.append(kvp("status", "exchanged"));
+  setA.append(kvp("updatedAt", bsoncxx::types::b_date{now}));
+
+  auto resA = collection.update_one(session, filterA.view(),
+                                    make_document(kvp("$set", setA.view())));
+  if (!resA || resA->modified_count() == 0) {
+    return false;
+  }
+
+  // Phase 2: Acquire offered book conditionally inside session
+  document filterB;
+  filterB.append(kvp("_id", offOid));
+  filterB.append(kvp("ownerId", requesterId));
+  filterB.append(kvp("status", "available"));
+
+  document setB;
+  setB.append(kvp("ownerId", receiverId));
+  setB.append(kvp("status", "exchanged"));
+  setB.append(kvp("updatedAt", bsoncxx::types::b_date{now}));
+
+  auto resB = collection.update_one(session, filterB.view(),
+                                    make_document(kvp("$set", setB.view())));
+  if (!resB || resB->modified_count() == 0) {
+    return false;
+  }
+
+  return true;
+}
+
+bool BookRepository::revertExchangeOwnership(const std::string &requestedBookId,
+                                             const std::string &receiverId,
+                                             const std::string &offeredBookId,
+                                             const std::string &requesterId) {
+  bsoncxx::oid reqOid, offOid;
+  try {
+    reqOid = bsoncxx::oid{requestedBookId};
+    offOid = bsoncxx::oid{offeredBookId};
+  } catch (const std::exception &) {
+    return false;
+  }
+
+  auto collection = MongoDatabase::instance().database()["books"];
+  const auto now = std::chrono::system_clock::now();
+
+  // Phase 1: Revert requested book back to receiver if it is currently in 'exchanged' status under requester
+  document filterA;
+  filterA.append(kvp("_id", reqOid));
+  filterA.append(kvp("ownerId", requesterId));
+  filterA.append(kvp("status", "exchanged"));
+
+  document setA;
+  setA.append(kvp("ownerId", receiverId));
+  setA.append(kvp("status", "available"));
+  setA.append(kvp("updatedAt", bsoncxx::types::b_date{now}));
+
+  auto resA = collection.update_one(filterA.view(),
+                                    make_document(kvp("$set", setA.view())));
+
+  // Phase 2: Revert offered book back to requester if it is currently in 'exchanged' status under receiver
+  document filterB;
+  filterB.append(kvp("_id", offOid));
+  filterB.append(kvp("ownerId", receiverId));
+  filterB.append(kvp("status", "exchanged"));
+
+  document setB;
+  setB.append(kvp("ownerId", requesterId));
+  setB.append(kvp("status", "available"));
+  setB.append(kvp("updatedAt", bsoncxx::types::b_date{now}));
+
+  auto resB = collection.update_one(filterB.view(),
+                                    make_document(kvp("$set", setB.view())));
+
+  const bool okA = (resA && resA->modified_count() > 0);
+  const bool okB = (resB && resB->modified_count() > 0);
+
+  return okA && okB;
+}
+
 bool BookRepository::updateRating(const std::string &bookId,
                                   double averageRating, int reviewCount) {
   bsoncxx::oid objectId;

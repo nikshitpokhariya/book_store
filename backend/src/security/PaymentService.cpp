@@ -68,8 +68,8 @@ PaymentResult PaymentService::processPayment(const std::string &paymentMethod,
     result.message = "Cash on delivery selected. Payment due upon arrival.";
   } else {
     result.success = true;
-    result.paymentStatus = "paid";
-    result.message = "Simulated demo payment completed successfully.";
+    result.paymentStatus = "simulated";
+    result.message = "Simulated demo checkout recorded. No real payment processed.";
   }
 
   return result;

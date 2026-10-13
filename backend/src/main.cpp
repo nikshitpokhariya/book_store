@@ -104,6 +104,21 @@ int main() {
         },
         {drogon::Get});
 
+    // Lightweight, non-sensitive health check endpoints
+    auto healthHandler =
+        [](const drogon::HttpRequestPtr &req,
+           std::function<void(const drogon::HttpResponsePtr &)> &&callback) {
+          Json::Value body;
+          body["status"] = "ok";
+          body["service"] = "BookBazzar Backend";
+          auto resp = drogon::HttpResponse::newHttpJsonResponse(body);
+          resp->setStatusCode(drogon::k200OK);
+          callback(resp);
+        };
+
+    drogon::app().registerHandler("/health", healthHandler, {drogon::Get});
+    drogon::app().registerHandler("/api/health", healthHandler, {drogon::Get});
+
     std::cout << "[INFO] Binding Drogon listener to 0.0.0.0:" << config.port()
               << "..." << std::endl;
     std::cout.flush();
@@ -111,7 +126,25 @@ int main() {
     drogon::app()
         .loadConfigFile("config.json")
         .setClientMaxBodySize(50 * 1024 * 1024)
-        .setClientMaxMemoryBodySize(50 * 1024 * 1024)
+        .setClientMaxMemoryBodySize(50 * 1024 * 1024);
+
+    const char *logLevelEnv = std::getenv("LOG_LEVEL");
+    if (logLevelEnv) {
+      std::string lvl(logLevelEnv);
+      if (lvl == "WARN" || lvl == "WARNING") {
+        drogon::app().setLogLevel(trantor::Logger::kWarn);
+      } else if (lvl == "ERROR") {
+        drogon::app().setLogLevel(trantor::Logger::kError);
+      } else if (lvl == "DEBUG") {
+        drogon::app().setLogLevel(trantor::Logger::kDebug);
+      } else {
+        drogon::app().setLogLevel(trantor::Logger::kInfo);
+      }
+    } else {
+      drogon::app().setLogLevel(trantor::Logger::kInfo);
+    }
+
+    drogon::app()
         .addListener("0.0.0.0", config.port())
         .run();
   } catch (const std::exception &e) {

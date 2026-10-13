@@ -6,7 +6,8 @@ class UploadController : public drogon::HttpController<UploadController> {
 public:
   METHOD_LIST_BEGIN
 
-  ADD_METHOD_TO(UploadController::upload, "/api/upload", drogon::Post);
+  ADD_METHOD_TO(UploadController::upload, "/api/upload", drogon::Post,
+                "RateLimitFilter", "AuthFilter");
   ADD_METHOD_TO(UploadController::previewMedia, "/api/media/preview", drogon::Get);
 
   METHOD_LIST_END

@@ -1,12 +1,17 @@
 #include "services/ExchangeService.h"
+#include "db/MongoDatabase.h"
+#include "config/AppConfig.h"
 
 #include <openssl/rand.h>
+#include <mongocxx/exception/operation_exception.hpp>
+#include <trantor/utils/Logger.h>
 
 #include <algorithm>
 #include <chrono>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -203,36 +208,211 @@ ExchangeRequest ExchangeService::acceptExchange(const std::string &requestId,
     throw std::runtime_error("UNAUTHORIZED");
   }
 
-  auto req = exchanges_.findById(requestId);
-  if (!req) {
+  // Pre-validate existence, authorization, and status outside transaction to fail fast
+  auto initialReq = exchanges_.findById(requestId);
+  if (!initialReq) {
     throw std::runtime_error("EXCHANGE_NOT_FOUND");
   }
 
-  if (req->receiverId != receiverId) {
+  if (initialReq->receiverId != receiverId) {
     throw std::runtime_error(
         "FORBIDDEN: Only the receiver of the exchange request can accept it");
   }
 
-  if (req->status != "PENDING") {
+  if (initialReq->status != "PENDING") {
     throw std::runtime_error("EXCHANGE_NOT_PENDING: Request is already " +
-                             req->status);
+                             initialReq->status);
   }
 
-  // Atomically swap ownership of both physical books
-  const bool swapped = books_.exchangeOwnership(
-      req->requestedBook.bookId, req->receiverId, req->offeredBook.bookId,
-      req->requesterId);
+  const bool isProd = AppConfig::instance().isProduction();
+  const auto txSupport = MongoDatabase::instance().transactionSupportStatus();
+  const bool txSupported = (txSupport == MongoTransactionSupport::SUPPORTED);
 
-  if (!swapped) {
+  if (isProd && !txSupported) {
+    LOG_ERROR << "[ExchangeService] CRITICAL: Transaction support unverified or unavailable in production for requestId: "
+              << requestId << " (status: " << (txSupport == MongoTransactionSupport::UNKNOWN ? "UNKNOWN/UNVERIFIED" : "UNSUPPORTED")
+              << "). Failing closed.";
     throw std::runtime_error(
-        "EXCHANGE_ACQUISITION_FAILED: One or both books are no longer "
-        "available or their ownership has changed");
+        "EXCHANGE_TRANSACTIONS_UNAVAILABLE: Multi-document transactions are required in production, "
+        "but database transaction support cannot be verified or is unsupported");
   }
 
-  exchanges_.updateStatus(
-      requestId, "COMPLETED",
-      "Exchange accepted and physical book ownership successfully swapped",
-      true);
+  if (txSupported) {
+    // Multi-Document Transaction Path (ACID compliant on replica sets / MongoDB Atlas)
+    auto session = MongoDatabase::instance().startSession();
+    const int maxTxAttempts = 3;
+    const int maxCommitAttempts = 3;
+
+    for (int txAttempt = 0; txAttempt < maxTxAttempts; ++txAttempt) {
+      try {
+        session.start_transaction();
+
+        // 1. Confirm exchange request inside transaction snapshot
+        auto req = exchanges_.findById(session, requestId);
+        if (!req) {
+          try { session.abort_transaction(); } catch (...) {}
+          throw std::runtime_error("EXCHANGE_NOT_FOUND");
+        }
+
+        if (req->receiverId != receiverId) {
+          try { session.abort_transaction(); } catch (...) {}
+          throw std::runtime_error(
+              "FORBIDDEN: Only the receiver of the exchange request can accept it");
+        }
+
+        if (req->status != "PENDING") {
+          try { session.abort_transaction(); } catch (...) {}
+          throw std::runtime_error("EXCHANGE_NOT_PENDING: Request is already " +
+                                   req->status);
+        }
+
+        // 2. Atomically swap physical book ownership inside the transaction
+        const bool swapped = books_.exchangeOwnership(
+            session, req->requestedBook.bookId, req->receiverId,
+            req->offeredBook.bookId, req->requesterId);
+
+        if (!swapped) {
+          try { session.abort_transaction(); } catch (...) {}
+          throw std::runtime_error(
+              "EXCHANGE_ACQUISITION_FAILED: One or both books are no longer "
+              "available or their ownership has changed");
+        }
+
+        // 3. Conditionally update exchange request from PENDING to COMPLETED in transaction
+        const bool statusUpdated = exchanges_.updateStatus(
+            session, requestId, "COMPLETED",
+            "Exchange accepted and physical book ownership successfully swapped",
+            true, "PENDING");
+
+        if (!statusUpdated) {
+          try { session.abort_transaction(); } catch (...) {}
+          auto current = exchanges_.findById(session, requestId);
+          const std::string currentStatus = current ? current->status : "UNKNOWN";
+          throw std::runtime_error(
+              "EXCHANGE_NOT_PENDING: Request was already processed or cancelled (status: " +
+              currentStatus + ")");
+        }
+
+        // 4. Commit transaction with dedicated bounded retry logic on UnknownTransactionCommitResult
+        bool committed = false;
+        for (int commitAttempt = 0; commitAttempt < maxCommitAttempts; ++commitAttempt) {
+          try {
+            session.commit_transaction();
+            committed = true;
+            break;
+          } catch (const mongocxx::operation_exception &commitEx) {
+            if (commitEx.has_error_label("UnknownTransactionCommitResult")) {
+              if (commitAttempt + 1 < maxCommitAttempts) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(50 * (commitAttempt + 1)));
+                continue; // Retry commit_transaction on the same session and transaction
+              }
+              // Exhausted commit retry budget
+              LOG_ERROR << "[ExchangeService] CRITICAL: Transaction commit outcome unresolved for exchange requestId: "
+                        << requestId << " after " << maxCommitAttempts << " attempts. Manual reconciliation required.";
+              throw std::runtime_error(
+                  "EXCHANGE_COMMIT_INDETERMINATE: Transaction commit status indeterminate for requestId " +
+                  requestId + " (UnknownTransactionCommitResult retry budget exhausted)");
+            }
+            // If commit threw without UnknownTransactionCommitResult (e.g. TransientTransactionError), rethrow
+            throw;
+          }
+        }
+
+        if (committed) {
+          break; // Successfully committed transaction
+        }
+      } catch (const mongocxx::operation_exception &opEx) {
+        try {
+          session.abort_transaction();
+        } catch (...) {}
+
+        if (opEx.has_error_label("TransientTransactionError") && txAttempt + 1 < maxTxAttempts) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(50 * (txAttempt + 1)));
+          continue; // Whole-transaction retry: fresh transaction starts on next iteration
+        }
+        throw;
+      } catch (const std::runtime_error &re) {
+        if (std::string(re.what()).rfind("EXCHANGE_COMMIT_INDETERMINATE", 0) == 0) {
+          // Commit outcome is indeterminate. Do not abort or modify transaction state.
+          throw;
+        }
+        try {
+          session.abort_transaction();
+        } catch (...) {}
+        throw;
+      } catch (...) {
+        try {
+          session.abort_transaction();
+        } catch (...) {}
+        throw;
+      }
+    }
+  } else {
+    // Non-transactional fallback for standalone MongoDB environments (DEVELOPMENT ONLY)
+    if (!AppConfig::instance().allowStandaloneDev()) {
+      LOG_ERROR << "[ExchangeService] Standalone MongoDB non-transactional fallback blocked for requestId: "
+                << requestId << ". Set ALLOW_STANDALONE_DEV=true in non-production environments to enable.";
+      throw std::runtime_error(
+          "EXCHANGE_TRANSACTIONS_UNSUPPORTED: Multi-document transactions are not supported by the current MongoDB deployment. "
+          "Set ALLOW_STANDALONE_DEV=true for local development fallback.");
+    }
+
+    LOG_WARN << "[ExchangeService] WARNING: Executing non-transactional exchange acceptance for requestId: "
+             << requestId << " (Development standalone mode only. NOT crash-atomic).";
+
+    const bool swapped = books_.exchangeOwnership(
+        initialReq->requestedBook.bookId, initialReq->receiverId,
+        initialReq->offeredBook.bookId, initialReq->requesterId);
+
+    if (!swapped) {
+      throw std::runtime_error(
+          "EXCHANGE_ACQUISITION_FAILED: One or both books are no longer "
+          "available or their ownership has changed");
+    }
+
+    bool statusUpdated = false;
+    try {
+      statusUpdated = exchanges_.updateStatus(
+          requestId, "COMPLETED",
+          "Exchange accepted and physical book ownership successfully swapped",
+          true, "PENDING");
+    } catch (const std::exception &e) {
+      const bool reverted = books_.revertExchangeOwnership(
+          initialReq->requestedBook.bookId, initialReq->receiverId,
+          initialReq->offeredBook.bookId, initialReq->requesterId);
+      if (!reverted) {
+        LOG_FATAL << "[ExchangeService] CRITICAL COMPENSATION FAILURE: Failed to revert book ownership for requestId: "
+                  << requestId << " after updateStatus exception (" << e.what()
+                  << "). Inconsistent state across books collection; manual intervention required.";
+      }
+      throw;
+    } catch (...) {
+      const bool reverted = books_.revertExchangeOwnership(
+          initialReq->requestedBook.bookId, initialReq->receiverId,
+          initialReq->offeredBook.bookId, initialReq->requesterId);
+      if (!reverted) {
+        LOG_FATAL << "[ExchangeService] CRITICAL COMPENSATION FAILURE: Failed to revert book ownership for requestId: "
+                  << requestId << " after unknown updateStatus exception. Inconsistent state across books collection; manual intervention required.";
+      }
+      throw;
+    }
+
+    if (!statusUpdated) {
+      const bool reverted = books_.revertExchangeOwnership(
+          initialReq->requestedBook.bookId, initialReq->receiverId,
+          initialReq->offeredBook.bookId, initialReq->requesterId);
+      if (!reverted) {
+        LOG_FATAL << "[ExchangeService] CRITICAL COMPENSATION FAILURE: Failed to revert book ownership for requestId: "
+                  << requestId << " when updateStatus returned false. Inconsistent state across books collection; manual intervention required.";
+      }
+
+      auto current = exchanges_.findById(requestId);
+      const std::string currentStatus = current ? current->status : "UNKNOWN";
+      throw std::runtime_error(
+          "EXCHANGE_NOT_PENDING: Request was already processed or cancelled (status: " +
+          currentStatus + (reverted ? ", book ownership reverted" : ", CRITICAL: compensation revert failed") + ")");
+    }
+  }
 
   auto updated = exchanges_.findById(requestId);
   if (!updated) {
@@ -264,8 +444,14 @@ ExchangeRequest ExchangeService::rejectExchange(const std::string &requestId,
                              req->status);
   }
 
-  exchanges_.updateStatus(requestId, "REJECTED",
-                          note.empty() ? "Exchange request declined" : note);
+  const bool statusUpdated = exchanges_.updateStatus(
+      requestId, "REJECTED",
+      note.empty() ? "Exchange request declined" : note,
+      false, "PENDING");
+
+  if (!statusUpdated) {
+    throw std::runtime_error("EXCHANGE_NOT_PENDING: Request is no longer pending");
+  }
 
   auto updated = exchanges_.findById(requestId);
   if (!updated) {
@@ -297,9 +483,14 @@ ExchangeRequest ExchangeService::cancelExchange(const std::string &requestId,
                              req->status);
   }
 
-  exchanges_.updateStatus(
+  const bool statusUpdated = exchanges_.updateStatus(
       requestId, "CANCELLED",
-      note.empty() ? "Exchange request cancelled by requester" : note);
+      note.empty() ? "Exchange request cancelled by requester" : note,
+      false, "PENDING");
+
+  if (!statusUpdated) {
+    throw std::runtime_error("EXCHANGE_NOT_PENDING: Request is no longer pending");
+  }
 
   auto updated = exchanges_.findById(requestId);
   if (!updated) {

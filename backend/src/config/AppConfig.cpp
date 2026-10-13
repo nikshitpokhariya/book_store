@@ -90,8 +90,21 @@ AppConfig::AppConfig() {
   jwtSecret_ = getEnv("JWT_SECRET");
   jwtIssuer_ = getEnv("JWT_ISSUER", "myapp-api");
   accessTokenLifetime_ = getIntEnv("ACCESS_TOKEN_LIFETIME", 900);
-  refreshTokenLifetime_ = getIntEnv("REFRESH_TOKEN_LIFETIME", 2592000);
-  secureCookies_ = getBoolEnv("SECURE_COOKIES", false);
+  bool isProduction = false;
+  const char *nodeEnv = std::getenv("NODE_ENV");
+  const char *envVal = std::getenv("ENVIRONMENT");
+  const char *renderEnv = std::getenv("RENDER");
+  if ((nodeEnv && std::string(nodeEnv) == "production") ||
+      (envVal && std::string(envVal) == "production") ||
+      (renderEnv && std::string(renderEnv).length() > 0)) {
+    isProduction = true;
+  }
+  isProduction_ = isProduction;
+  secureCookies_ = getBoolEnv("SECURE_COOKIES", isProduction);
+
+  // Standalone MongoDB fallback is strictly development-only and requires explicit opt-in.
+  // In production (including Render), standalone fallback is always disabled (fails closed).
+  allowStandaloneDev_ = !isProduction_ && getBoolEnv("ALLOW_STANDALONE_DEV", false);
 
   cloudinaryCloudName_ = getEnv("CLOUDINARY_CLOUD_NAME", "");
   cloudinaryApiKey_ = getEnv("CLOUDINARY_API_KEY", "");
@@ -126,6 +139,10 @@ std::int64_t AppConfig::refreshTokenLifetime() const {
 }
 
 bool AppConfig::secureCookies() const { return secureCookies_; }
+
+bool AppConfig::isProduction() const { return isProduction_; }
+
+bool AppConfig::allowStandaloneDev() const { return allowStandaloneDev_; }
 
 const std::string &AppConfig::cloudinaryCloudName() const {
   return cloudinaryCloudName_;

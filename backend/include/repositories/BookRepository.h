@@ -1,6 +1,7 @@
 #pragma once
 
 #include "models/Book.h"
+#include <mongocxx/client_session.hpp>
 
 #include <optional>
 #include <string>
@@ -31,6 +32,17 @@ public:
                          const std::string &receiverId,
                          const std::string &offeredBookId,
                          const std::string &requesterId);
+
+  bool exchangeOwnership(mongocxx::client_session &session,
+                         const std::string &requestedBookId,
+                         const std::string &receiverId,
+                         const std::string &offeredBookId,
+                         const std::string &requesterId);
+
+  bool revertExchangeOwnership(const std::string &requestedBookId,
+                               const std::string &receiverId,
+                               const std::string &offeredBookId,
+                               const std::string &requesterId);
 
   bool updateRating(const std::string &bookId, double averageRating,
                     int reviewCount);

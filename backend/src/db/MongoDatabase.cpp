@@ -2,7 +2,9 @@
 #include "config/AppConfig.h"
 
 #include <chrono>
+#include <iostream>
 #include <mongocxx/options/index.hpp>
+#include <trantor/utils/Logger.h>
 
 #include <bsoncxx/builder/basic/document.hpp>
 #include <bsoncxx/builder/basic/kvp.hpp>
@@ -11,7 +13,9 @@ using bsoncxx::builder::basic::kvp;
 using bsoncxx::builder::basic::make_document;
 
 MongoDatabase::MongoDatabase()
-    : client_{mongocxx::uri{AppConfig::instance().mongoUri()}} {}
+    : client_{mongocxx::uri{AppConfig::instance().mongoUri()}} {
+  initTransactionSupport();
+}
 
 MongoDatabase &MongoDatabase::instance() {
   static MongoDatabase instance;
@@ -20,6 +24,70 @@ MongoDatabase &MongoDatabase::instance() {
 
 mongocxx::database MongoDatabase::database() {
   return client_[AppConfig::instance().mongoDatabase()];
+}
+
+mongocxx::client &MongoDatabase::client() {
+  return client_;
+}
+
+mongocxx::client_session MongoDatabase::startSession(const mongocxx::options::client_session &options) {
+  return client_.start_session(options);
+}
+
+void MongoDatabase::initTransactionSupport() {
+  try {
+    auto db = client_[AppConfig::instance().mongoDatabase()];
+    bsoncxx::document::value doc{make_document()};
+    bool probeOk = false;
+    try {
+      doc = db.run_command(make_document(kvp("hello", 1)));
+      probeOk = true;
+    } catch (...) {
+      try {
+        doc = db.run_command(make_document(kvp("isMaster", 1)));
+        probeOk = true;
+      } catch (const std::exception &e) {
+        LOG_WARN << "[MongoDatabase] Topology probe failed: " << e.what();
+      } catch (...) {
+        LOG_WARN << "[MongoDatabase] Topology probe failed with unknown exception";
+      }
+    }
+
+    if (!probeOk) {
+      // Failed or timed out probe MUST NOT be interpreted as proof that transactions are unsupported.
+      // Retain UNKNOWN status so callers (e.g. in production/Render) fail closed.
+      transactionSupport_ = MongoTransactionSupport::UNKNOWN;
+      LOG_WARN << "[MongoDatabase] Topology probe timed out or failed; transaction capability remains UNKNOWN.";
+      return;
+    }
+
+    auto view = doc.view();
+    if (view["setName"] || view["msg"]) {
+      transactionSupport_ = MongoTransactionSupport::SUPPORTED;
+      LOG_INFO << "[MongoDatabase] MongoDB topology verified: multi-document transactions SUPPORTED.";
+    } else {
+      transactionSupport_ = MongoTransactionSupport::UNSUPPORTED;
+      LOG_WARN << "[MongoDatabase] Standalone MongoDB detected: multi-document transactions UNSUPPORTED.";
+    }
+  } catch (const std::exception &e) {
+    LOG_WARN << "[MongoDatabase] Failed to probe MongoDB topology: " << e.what();
+    transactionSupport_ = MongoTransactionSupport::UNKNOWN;
+  } catch (...) {
+    LOG_WARN << "[MongoDatabase] Failed to probe MongoDB topology (unknown exception)";
+    transactionSupport_ = MongoTransactionSupport::UNKNOWN;
+  }
+}
+
+MongoTransactionSupport MongoDatabase::transactionSupportStatus() {
+  std::lock_guard<std::mutex> lock(supportMutex_);
+  if (transactionSupport_ == MongoTransactionSupport::UNKNOWN) {
+    initTransactionSupport();
+  }
+  return transactionSupport_;
+}
+
+bool MongoDatabase::supportsTransactions() {
+  return transactionSupportStatus() == MongoTransactionSupport::SUPPORTED;
 }
 
 void MongoDatabase::ensureIndexes() {

@@ -108,6 +108,7 @@ Json::Value orderJson(const Order &order) {
   payJson["status"] = order.payment.status;
   payJson["transactionId"] = order.payment.transactionId;
   payJson["paidAt"] = toIsoString(order.payment.paidAt);
+  payJson["simulated"] = (order.payment.status == "simulated" || order.payment.method == "CARD" || order.payment.method == "UPI");
   result["payment"] = payJson;
 
   // Shipping Info
@@ -197,7 +198,10 @@ void OrderController::checkout(
 
     Json::Value body;
     body["success"] = true;
-    body["message"] = "Order placed successfully";
+    body["message"] = (order.payment.status == "simulated")
+                          ? "Simulated demo checkout recorded. No real payment processed."
+                          : "Order placed successfully";
+    body["simulatedPayment"] = (order.payment.status == "simulated");
     body["order"] = orderJson(order);
 
     auto response = HttpResponse::newHttpJsonResponse(body);

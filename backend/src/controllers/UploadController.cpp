@@ -8,16 +8,10 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
-#include <cstdlib>
-#include <fstream>
+#include <filesystem>
 #include <iomanip>
 #include <sstream>
-#include <filesystem>
-
-#ifdef _WIN32
-#include <process.h>
-#include <windows.h>
-#endif
+#include <string>
 
 using namespace drogon;
 
@@ -44,119 +38,37 @@ std::string computeSha1Hex(const std::string &input) {
   return oss.str();
 }
 
-std::string getTempFilePath(const std::string &prefix, const std::string &ext) {
-  auto now = std::chrono::duration_cast<std::chrono::microseconds>(
-                 std::chrono::system_clock::now().time_since_epoch())
-                 .count();
-#ifdef _WIN32
-  char tempDir[MAX_PATH];
-  DWORD len = GetTempPathA(MAX_PATH, tempDir);
-  std::string dir = (len > 0 && len < MAX_PATH) ? std::string(tempDir) : ".\\";
-  return dir + prefix + "_" + std::to_string(now) + (ext.empty() ? "" : "." + ext);
-#else
-  return "/tmp/" + prefix + "_" + std::to_string(now) + (ext.empty() ? "" : "." + ext);
-#endif
+bool isSafeFilename(const std::string &name) {
+  if (name.empty() || name.size() > 255) return false;
+  if (name.find("..") != std::string::npos) return false;
+  if (name.find('/') != std::string::npos || name.find('\\') != std::string::npos) return false;
+  for (unsigned char c : name) {
+    if (c < 32 || c == 127) return false;
+  }
+  return true;
 }
 
-void uploadViaCurlFallback(
-    const std::string &cloudName, const std::string &resourceType,
-    const std::string &apiKey, const std::string &timestamp,
-    const std::string &signature, const std::string &fileName,
-    const std::string &fileBytes,
-    std::function<void(const HttpResponsePtr &)> callback) {
-  LOG_INFO << "[UploadController] Executing signed Cloudinary REST upload via curl fallback...";
-
-  std::string ext;
-  auto dotPos = fileName.rfind('.');
-  if (dotPos != std::string::npos) {
-    ext = fileName.substr(dotPos + 1);
+bool validateFileSignature(const std::string &ext, const std::string &bytes) {
+  if (ext == "jpg" || ext == "jpeg") {
+    if (bytes.size() < 3) return false;
+    const auto *ub = reinterpret_cast<const unsigned char *>(bytes.data());
+    return ub[0] == 0xFF && ub[1] == 0xD8 && ub[2] == 0xFF;
   }
-
-  std::string tempFile = getTempFilePath("cld_up", ext);
-  std::ofstream out(tempFile, std::ios::binary);
-  if (!out.is_open()) {
-    LOG_ERROR << "[UploadController] Failed to create temporary file for upload: " << tempFile;
-    callback(jsonError(k500InternalServerError, "Failed to create temporary file for upload"));
-    return;
+  if (ext == "png") {
+    if (bytes.size() < 8) return false;
+    const auto *ub = reinterpret_cast<const unsigned char *>(bytes.data());
+    return ub[0] == 0x89 && ub[1] == 0x50 && ub[2] == 0x4E && ub[3] == 0x47 &&
+           ub[4] == 0x0D && ub[5] == 0x0A && ub[6] == 0x1A && ub[7] == 0x0A;
   }
-  out.write(fileBytes.data(), fileBytes.size());
-  out.close();
-
-  std::string url = "https://api.cloudinary.com/v1_1/" + cloudName + "/" + resourceType + "/upload";
-#ifdef _WIN32
-  std::string curlBin = "curl.exe";
-#else
-  std::string curlBin = "curl";
-#endif
-  std::string cmd = curlBin + " -s -X POST \"" + url + "\" " +
-                    "-F \"file=@" + tempFile + "\" " +
-                    "-F \"api_key=" + apiKey + "\" " +
-                    "-F \"timestamp=" + timestamp + "\" " +
-                    "-F \"signature=" + signature + "\"";
-
-  std::string responseOutput;
-#ifdef _WIN32
-  FILE *pipe = _popen(cmd.c_str(), "r");
-#else
-  FILE *pipe = popen(cmd.c_str(), "r");
-#endif
-
-  if (pipe) {
-    char buffer[4096];
-    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-      responseOutput += buffer;
-    }
-#ifdef _WIN32
-    _pclose(pipe);
-#else
-    pclose(pipe);
-#endif
+  if (ext == "webp") {
+    if (bytes.size() < 12) return false;
+    return bytes.compare(0, 4, "RIFF") == 0 && bytes.compare(8, 4, "WEBP") == 0;
   }
-
-  // Delete temp file
-  std::remove(tempFile.c_str());
-
-  if (responseOutput.empty()) {
-    LOG_ERROR << "[UploadController] Empty response from Cloudinary upload service at: " << url;
-    callback(jsonError(k502BadGateway, "Empty response from Cloudinary upload service"));
-    return;
+  if (ext == "mp4") {
+    if (bytes.size() < 8) return false;
+    return bytes.compare(4, 4, "ftyp") == 0;
   }
-
-  Json::CharReaderBuilder readerBuilder;
-  Json::Value root;
-  std::string parseErrors;
-  std::istringstream sstr(responseOutput);
-  if (!Json::parseFromStream(readerBuilder, sstr, &root, &parseErrors)) {
-    LOG_ERROR << "[UploadController] Failed to parse Cloudinary response: " << parseErrors
-              << " Raw Output: " << responseOutput;
-    callback(jsonError(k502BadGateway, "Failed to parse Cloudinary response: " + parseErrors));
-    return;
-  }
-
-  if (root.isMember("secure_url")) {
-    std::string secureUrl = root["secure_url"].asString();
-    std::string publicId = root.get("public_id", "").asString();
-    LOG_INFO << "[UploadController] [SUCCESS] Uploaded to Cloudinary: " << secureUrl
-             << " (public_id: " << publicId << ")";
-
-    Json::Value result;
-    result["success"] = true;
-    result["url"] = secureUrl;
-    result["secure_url"] = secureUrl;
-    result["public_id"] = publicId;
-    result["format"] = root.get("format", "").asString();
-
-    auto response = HttpResponse::newHttpJsonResponse(result);
-    callback(response);
-    return;
-  }
-
-  std::string errMsg = root.isMember("error") && root["error"].isMember("message")
-                           ? root["error"]["message"].asString()
-                           : "Cloudinary upload failed";
-  LOG_ERROR << "[UploadController] [ERROR] Cloudinary rejected upload: " << errMsg
-            << " Details: " << responseOutput;
-  callback(jsonError(k500InternalServerError, errMsg));
+  return false;
 }
 
 } // namespace
@@ -164,6 +76,18 @@ void uploadViaCurlFallback(
 void UploadController::upload(
     const HttpRequestPtr &req,
     std::function<void(const HttpResponsePtr &)> &&callback) {
+  // Confirm authenticated identity
+  std::string userId;
+  try {
+    userId = req->attributes()->get<std::string>("userId");
+  } catch (...) {}
+
+  if (userId.empty()) {
+    LOG_WARN << "[UploadController] Upload rejected: Missing user authentication";
+    callback(jsonError(k401Unauthorized, "Authentication required to upload files"));
+    return;
+  }
+
   MultiPartParser parser;
   if (parser.parse(req) != 0) {
     LOG_ERROR << "[UploadController] Failed to parse multipart/form-data request";
@@ -179,37 +103,79 @@ void UploadController::upload(
   }
 
   const auto &file = files.front();
-  std::string fileName = std::string(file.getFileName());
-  if (fileName.empty()) {
-    fileName = "upload.bin";
+  std::string rawFileName = std::string(file.getFileName());
+  if (rawFileName.empty()) {
+    callback(jsonError(k400BadRequest, "Filename cannot be empty"));
+    return;
+  }
+
+  // Validate filename safety (reject directory traversal, dangerous paths)
+  if (!isSafeFilename(rawFileName)) {
+    LOG_WARN << "[UploadController] Malicious or invalid filename rejected: " << rawFileName;
+    callback(jsonError(k400BadRequest, "Invalid filename: Directory traversal or invalid characters detected"));
+    return;
   }
 
   std::string ext;
-  auto dotPos = fileName.rfind('.');
-  if (dotPos != std::string::npos) {
-    ext = fileName.substr(dotPos + 1);
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+  auto dotPos = rawFileName.rfind('.');
+  if (dotPos != std::string::npos && dotPos + 1 < rawFileName.size()) {
+    ext = rawFileName.substr(dotPos + 1);
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+      return static_cast<char>(std::tolower(c));
+    });
   }
 
-  std::string resourceType = "image";
-  if (ext == "mp4" || ext == "mov" || ext == "avi" || ext == "webm" ||
-      ext == "mkv" || ext == "flv" || ext == "m4v") {
-    resourceType = "video";
+  const bool isImage = (ext == "jpg" || ext == "jpeg" || ext == "png" || ext == "webp");
+  const bool isVideo = (ext == "mp4");
+
+  if (!isImage && !isVideo) {
+    LOG_WARN << "[UploadController] Unsupported file extension rejected: " << ext;
+    callback(jsonError(k400BadRequest,
+                       "Unsupported file extension. Only JPG, JPEG, PNG, WEBP images and MP4 videos are supported."));
+    return;
   }
 
-  std::string mimeType = "application/octet-stream";
-  if (ext == "jpg" || ext == "jpeg") mimeType = "image/jpeg";
-  else if (ext == "png") mimeType = "image/png";
-  else if (ext == "webp") mimeType = "image/webp";
-  else if (ext == "gif") mimeType = "image/gif";
-  else if (ext == "mp4") mimeType = "video/mp4";
-  else if (ext == "mov") mimeType = "video/quicktime";
-  else if (ext == "webm") mimeType = "video/webm";
+  const size_t fileLen = file.fileLength();
+  if (fileLen == 0) {
+    callback(jsonError(k400BadRequest, "Uploaded file is empty"));
+    return;
+  }
 
-  LOG_INFO << "[UploadController] Incoming upload: filename=" << fileName
-           << ", size=" << file.fileLength() << " bytes, mime=" << mimeType;
+  constexpr size_t kMaxImageSize = 10 * 1024 * 1024;  // 10 MB limit for images
+  constexpr size_t kMaxVideoSize = 30 * 1024 * 1024;  // 30 MB limit for videos
 
-  std::string fileBytes(file.fileData(), file.fileLength());
+  if (isImage && fileLen > kMaxImageSize) {
+    LOG_WARN << "[UploadController] Oversized image rejected: " << fileLen << " bytes";
+    callback(jsonError(k400BadRequest, "Image file exceeds maximum allowed limit of 10MB"));
+    return;
+  }
+
+  if (isVideo && fileLen > kMaxVideoSize) {
+    LOG_WARN << "[UploadController] Oversized video rejected: " << fileLen << " bytes";
+    callback(jsonError(k400BadRequest, "Video file exceeds maximum allowed limit of 30MB"));
+    return;
+  }
+
+  std::string fileBytes(file.fileData(), fileLen);
+  if (!validateFileSignature(ext, fileBytes)) {
+    LOG_WARN << "[UploadController] Spoofed or corrupt file signature rejected for: " << rawFileName;
+    callback(jsonError(k400BadRequest,
+                       "File signature validation failed. File content does not match extension."));
+    return;
+  }
+
+  std::string resourceType = isVideo ? "video" : "image";
+  std::string mimeType = "image/jpeg";
+  if (ext == "png") {
+    mimeType = "image/png";
+  } else if (ext == "webp") {
+    mimeType = "image/webp";
+  } else if (ext == "mp4") {
+    mimeType = "video/mp4";
+  }
+
+  LOG_INFO << "[UploadController] Authenticated upload accepted: user=" << userId
+           << ", file=" << rawFileName << ", size=" << fileLen << " bytes, mime=" << mimeType;
 
   const auto &config = AppConfig::instance();
   const std::string &cloudName = config.cloudinaryCloudName();
@@ -217,9 +183,8 @@ void UploadController::upload(
   const std::string &apiSecret = config.cloudinaryApiSecret();
 
   if (cloudName.empty() || apiKey.empty() || apiSecret.empty()) {
-    LOG_ERROR << "[UploadController] [CONFIGURATION ERROR] Missing Cloudinary credentials in .env!";
-    LOG_ERROR << "[UploadController] Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in backend/.env";
-    callback(jsonError(k500InternalServerError, "Cloudinary credentials not configured in backend/.env"));
+    LOG_ERROR << "[UploadController] Missing Cloudinary credentials in configuration";
+    callback(jsonError(k500InternalServerError, "Cloudinary credentials not configured in backend"));
     return;
   }
 
@@ -247,14 +212,14 @@ void UploadController::upload(
   body += signature + "\r\n";
 
   body += "--" + boundary + "\r\n";
-  body += "Content-Disposition: form-data; name=\"file\"; filename=\"" + fileName + "\"\r\n";
+  body += "Content-Disposition: form-data; name=\"file\"; filename=\"" + rawFileName + "\"\r\n";
   body += "Content-Type: " + mimeType + "\r\n\r\n";
   body.append(fileBytes);
   body += "\r\n";
 
   body += "--" + boundary + "--\r\n";
 
-  // Attempt Drogon HttpClient first
+  // Native asynchronous HTTP upload to Cloudinary (No popen / curl shell fallback)
   auto client = HttpClient::newHttpClient("https://api.cloudinary.com", app().getLoop(), false, false);
   auto cloudReq = HttpRequest::newHttpRequest();
   cloudReq->setMethod(Post);
@@ -264,8 +229,7 @@ void UploadController::upload(
 
   client->sendRequest(
       cloudReq,
-      [callback, cloudName, resourceType, apiKey, timestamp, signature, fileName,
-       fileBytes](ReqResult result, const HttpResponsePtr &resp) {
+      [callback](ReqResult result, const HttpResponsePtr &resp) {
         if (result == ReqResult::Ok && resp) {
           auto json = resp->getJsonObject();
           if (json && json->isMember("secure_url")) {
@@ -285,13 +249,19 @@ void UploadController::upload(
             callback(okResponse);
             return;
           }
+
+          std::string errMsg = (json && json->isMember("error") && (*json)["error"].isMember("message"))
+                                   ? (*json)["error"]["message"].asString()
+                                   : "Cloudinary upload rejected";
+          LOG_ERROR << "[UploadController] Cloudinary returned error: " << errMsg;
+          callback(jsonError(k502BadGateway, errMsg));
+          return;
         }
 
-        LOG_WARN << "[UploadController] Drogon async client failed or unverified. Invoking signed curl fallback...";
-        uploadViaCurlFallback(cloudName, resourceType, apiKey, timestamp, signature,
-                              fileName, fileBytes, callback);
+        LOG_ERROR << "[UploadController] Drogon async HTTP client failed or timed out contacting Cloudinary";
+        callback(jsonError(k502BadGateway, "Cloudinary upload service unavailable"));
       },
-      30.0); // 30 seconds timeout for media upload
+      30.0);
 }
 
 void UploadController::previewMedia(
@@ -304,36 +274,47 @@ void UploadController::previewMedia(
   }
 
   if (targetUrl.empty()) {
-    Json::Value err;
-    err["error"] = "Missing required query parameter: url";
-    auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
-    resp->setStatusCode(drogon::k400BadRequest);
-    callback(resp);
+    callback(jsonError(k400BadRequest, "Missing required query parameter: url"));
     return;
   }
 
-  // If local upload path
-  if (targetUrl.find("/uploads/") != std::string::npos || targetUrl.rfind("uploads/", 0) == 0) {
-    std::string filename = targetUrl;
-    auto pos = filename.rfind('/');
-    if (pos != std::string::npos) filename = filename.substr(pos + 1);
-    if (filename.find("..") != std::string::npos || filename.find('\\') != std::string::npos) {
-      callback(jsonError(k400BadRequest, "Invalid filename"));
+  // 1. Local upload media path validation
+  if (targetUrl.rfind("/uploads/", 0) == 0 || targetUrl.rfind("uploads/", 0) == 0) {
+    if (targetUrl.find("..") != std::string::npos || targetUrl.find('\\') != std::string::npos) {
+      LOG_WARN << "[UploadController] Path traversal attempted in local media preview: " << targetUrl;
+      callback(jsonError(k400BadRequest, "Invalid local media path: Path traversal detected"));
       return;
     }
+
+    std::string filename = (targetUrl.rfind("/uploads/", 0) == 0) ? targetUrl.substr(9) : targetUrl.substr(8);
+    if (!isSafeFilename(filename)) {
+      callback(jsonError(k400BadRequest, "Invalid filename in local media path"));
+      return;
+    }
+
     std::filesystem::path filePath = std::filesystem::path("./public/uploads") / filename;
     if (!std::filesystem::exists(filePath) || !std::filesystem::is_regular_file(filePath)) {
       auto resp = drogon::HttpResponse::newNotFoundResponse();
       callback(resp);
       return;
     }
+
     auto resp = drogon::HttpResponse::newFileResponse(filePath.string());
     callback(resp);
     return;
   }
 
-  // If Cloudinary URL, provide optimized transformation
-  if (targetUrl.find("res.cloudinary.com") != std::string::npos) {
+  // 2. Cloudinary trusted media path validation
+  const auto &config = AppConfig::instance();
+  const std::string &cloudName = config.cloudinaryCloudName();
+
+  if (cloudName.empty()) {
+    callback(jsonError(k400BadRequest, "External media preview unavailable: Cloud name not configured"));
+    return;
+  }
+
+  const std::string expectedPrefix = "https://res.cloudinary.com/" + cloudName + "/";
+  if (targetUrl.rfind(expectedPrefix, 0) == 0) {
     int w = 1200;
     int h = 1200;
     if (params.find("w") != params.end()) {
@@ -371,6 +352,7 @@ void UploadController::previewMedia(
     return;
   }
 
-  auto resp = drogon::HttpResponse::newRedirectionResponse(targetUrl);
-  callback(resp);
+  // 3. Reject any arbitrary external or untrusted URL
+  LOG_WARN << "[UploadController] Blocked untrusted redirect attempt: " << targetUrl;
+  callback(jsonError(k400BadRequest, "Untrusted redirect target: URL is not an allowed local or Cloudinary media path"));
 }

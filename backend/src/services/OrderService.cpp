@@ -113,9 +113,15 @@ Order OrderService::checkout(const std::string &buyerId,
   // 2. Reload latest book documents and validate availability
   std::vector<Book> booksToBuy;
   std::vector<std::string> bookIds;
+  std::unordered_set<std::string> seenBookIds;
   double subtotal = 0.0;
 
   for (const auto &raw : rawItems) {
+    if (seenBookIds.find(raw.bookId) != seenBookIds.end()) {
+      continue; // Skip duplicates in cart to avoid double-charging
+    }
+    seenBookIds.insert(raw.bookId);
+
     auto book = books_.findById(raw.bookId);
     if (!book) {
       throw std::runtime_error("STALE_CART_ITEM: Book listing not found");
@@ -130,10 +136,22 @@ Order OrderService::checkout(const std::string &buyerId,
                                "' is no longer available");
     }
 
+    if (book->price < 0.0) {
+      throw std::runtime_error("INVALID_BOOK_PRICE: Listing price cannot be negative");
+    }
+
     subtotal += book->price;
     booksToBuy.push_back(*book);
     bookIds.push_back(book->id);
   }
+
+  if (booksToBuy.empty()) {
+    throw std::runtime_error("CART_IS_EMPTY");
+  }
+
+  // Sort deterministically by book ID to avoid deadlocks across concurrent checkouts
+  std::sort(booksToBuy.begin(), booksToBuy.end(),
+            [](const Book &a, const Book &b) { return a.id < b.id; });
 
   const double shippingCost = 0.0;
   const double total = subtotal + shippingCost;
@@ -378,6 +396,8 @@ Order OrderService::cancelOrder(const std::string &orderId,
   std::string paymentStatus = order->payment.status;
   if (order->payment.status == "paid") {
     paymentStatus = "refunded";
+  } else if (order->payment.status == "simulated") {
+    paymentStatus = "cancelled";
   } else if (order->payment.status == "pending") {
     paymentStatus = "cancelled";
   }

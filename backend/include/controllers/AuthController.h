@@ -6,9 +6,11 @@ class AuthController : public drogon::HttpController<AuthController> {
 public:
   METHOD_LIST_BEGIN
 
-  ADD_METHOD_TO(AuthController::signup, "/api/auth/signup", drogon::Post);
+  ADD_METHOD_TO(AuthController::signup, "/api/auth/signup", drogon::Post,
+                "RateLimitFilter");
 
-  ADD_METHOD_TO(AuthController::login, "/api/auth/login", drogon::Post);
+  ADD_METHOD_TO(AuthController::login, "/api/auth/login", drogon::Post,
+                "RateLimitFilter");
 
   ADD_METHOD_TO(AuthController::refresh, "/api/auth/refresh", drogon::Post);
 
