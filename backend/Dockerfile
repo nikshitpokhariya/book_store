@@ -102,8 +102,10 @@ RUN ldconfig
 # Copy application binary, Drogon config, assets, and startup script
 COPY --from=builder /app/backend/build/BookExchangeBackend /app/backend/BookExchangeBackend
 COPY --from=builder /app/backend/config.json /app/backend/config.json
-COPY --from=builder /app/backend/public /app/backend/public
 COPY --from=builder /app/backend/start.sh /app/backend/start.sh
+
+# Ensure public uploads directory exists
+RUN mkdir -p /app/backend/public/uploads
 
 # Ensure startup script has Unix line endings and executable permissions
 RUN sed -i 's/\r$//' /app/backend/start.sh && chmod +x /app/backend/start.sh

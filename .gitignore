@@ -74,6 +74,7 @@ mongodb_data/
 # Uploads
 uploads/
 **/uploads/
+!**/uploads/.gitkeep
 
 # QtCreator
 .qtcreator/
