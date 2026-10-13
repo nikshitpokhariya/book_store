@@ -18,9 +18,15 @@ find_package(OpenSSL REQUIRED)
 
 find_package(jwt-cpp CONFIG REQUIRED)
 
-find_package(JsonCpp CONFIG REQUIRED)
+find_package(jsoncpp NAMES jsoncpp JsonCpp CONFIG REQUIRED)
 
-find_library(ARGON2_LIBRARY argon2 REQUIRED)
+find_package(unofficial-argon2 CONFIG QUIET)
+if(TARGET unofficial::argon2::argon2)
+    set(ARGON2_TARGET unofficial::argon2::argon2)
+else()
+    find_library(ARGON2_LIBRARY NAMES argon2 libargon2 REQUIRED)
+    set(ARGON2_TARGET ${ARGON2_LIBRARY})
+endif()
 
 # ==============================
 # Source files
@@ -85,5 +91,5 @@ target_link_libraries(${PROJECT_NAME}
 
         JsonCpp::JsonCpp
 
-        ${ARGON2_LIBRARY}
+        ${ARGON2_TARGET}
 )
