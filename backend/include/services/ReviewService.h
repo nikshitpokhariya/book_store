@@ -8,6 +8,7 @@
 #include "repositories/UserRepository.h"
 
 #include <string>
+#include <vector>
 
 class ReviewService {
 public:

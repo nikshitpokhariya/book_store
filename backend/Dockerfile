@@ -62,6 +62,7 @@ RUN cmake -S . -B build -G Ninja \
     -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
     -DVCPKG_TARGET_TRIPLET=x64-linux \
     -DVCPKG_OVERLAY_TRIPLETS=/app/backend/triplets \
+    -DVCPKG_INSTALLED_DIR=/app/backend/vcpkg_installed \
     -DCMAKE_BUILD_TYPE=Release \
     && cmake --build build --parallel ${BUILD_CONCURRENCY} \
     && strip /app/backend/build/BookExchangeBackend
