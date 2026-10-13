@@ -57,15 +57,19 @@ RUN "$VCPKG_ROOT/vcpkg" install \
 # Copy backend source tree
 COPY backend/ /app/backend/
 
-# Configure and compile Release executable with capped parallel jobs
+# Configure backend build using pre-installed vcpkg artifacts
 RUN cmake -S . -B build -G Ninja \
     -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
     -DVCPKG_TARGET_TRIPLET=x64-linux \
     -DVCPKG_OVERLAY_TRIPLETS=/app/backend/triplets \
     -DVCPKG_INSTALLED_DIR=/app/backend/vcpkg_installed \
-    -DCMAKE_BUILD_TYPE=Release \
-    && cmake --build build --parallel ${BUILD_CONCURRENCY} \
-    && strip /app/backend/build/BookExchangeBackend
+    -DCMAKE_BUILD_TYPE=Release
+
+# Compile backend executable with controlled concurrency
+RUN cmake --build build --parallel ${BUILD_CONCURRENCY}
+
+# Strip symbols to minimize binary footprint
+RUN strip /app/backend/build/BookExchangeBackend
 
 # Collect dynamic shared libraries (.so) produced by vcpkg
 RUN mkdir -p /app/backend/lib && \
