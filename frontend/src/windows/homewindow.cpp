@@ -61,6 +61,10 @@ HomeWindow::HomeWindow(const QString &userName, QWidget *parent)
 
     setupUI();
     refreshCartCount();
+
+    connect(&SessionManager::instance(), &SessionManager::sessionCleared, this, [this]() {
+        emit logoutRequested();
+    });
 }
 
 HomeWindow::~HomeWindow()

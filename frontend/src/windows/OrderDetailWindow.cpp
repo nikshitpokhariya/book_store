@@ -12,6 +12,7 @@
 #include <QFrame>
 #include "StyledMessageBox.h"
 #include "CancelOrderDialog.h"
+#include <QShortcut>
 #include <QInputDialog>
 #include <QDialog>
 #include <QSpinBox>

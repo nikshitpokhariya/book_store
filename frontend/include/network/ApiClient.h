@@ -38,9 +38,20 @@ class ApiClient : public QObject
 public:
     static ApiClient &instance();
 
-    static QString baseUrl() {
-        return QString::fromUtf8(kBaseUrl);
-    }
+    // Default URLs:
+    // Production Render Web Service URL (update before final packaging if using a custom domain)
+    static constexpr const char *kDefaultProductionUrl = "https://book-baazar.onrender.com";
+    // Local development fallback
+    static constexpr const char *kDefaultLocalUrl = "http://127.0.0.1:8080";
+    // Active compile-time default
+    static constexpr const char *kBaseUrl = kDefaultProductionUrl;
+
+    // Resolves base URL in priority:
+    // 1. Explicitly configured runtime URL via setBaseUrl()
+    // 2. BOOKBAZZAR_API_URL environment variable
+    // 3. Compile-time default (kBaseUrl)
+    static QString baseUrl();
+    static void setBaseUrl(const QString &url);
 
     // =====================================================
     // Convenience HTTP verbs
@@ -106,6 +117,7 @@ public:
 signals:
     void tokenRefreshed(const QString &newAccessToken);
     void refreshFailed();
+    void unauthorized();
 
 private:
     explicit ApiClient(QObject *parent = nullptr);
@@ -118,8 +130,8 @@ private:
                                  bool authenticated) const;
 
     QNetworkAccessManager *m_nam;
-
-    static constexpr const char *kBaseUrl = "http://127.0.0.1:8080";
+    bool m_isRefreshing{false};
+    static QString s_customBaseUrl;
 };
 
 #endif // APICLIENT_H

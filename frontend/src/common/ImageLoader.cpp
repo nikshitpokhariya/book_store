@@ -1,4 +1,5 @@
 #include "ImageLoader.h"
+#include "network/ApiClient.h"
 #include <QLabel>
 #include <QFileInfo>
 #include <QDir>
@@ -286,21 +287,32 @@ void ImageLoader::fetchPixmap(const QString &pathOrUrl,
         }
     }
 
-    // 2. Optimize URL for Cloudinary if applicable
-    const bool isCloudinary = trimmed.contains(QStringLiteral("res.cloudinary.com"));
-    const QString reqUrl = (isCloudinary && preferredSize.isValid() && preferredSize.width() > 0)
-                               ? getOptimizedCloudinaryUrl(trimmed, preferredSize, preferredSize.width() <= 120)
-                               : trimmed;
+    // 2. Resolve relative upload paths against ApiClient baseUrl
+    QString effectiveUrl = trimmed;
+    if (!effectiveUrl.startsWith(QStringLiteral("http://"), Qt::CaseInsensitive) &&
+        !effectiveUrl.startsWith(QStringLiteral("https://"), Qt::CaseInsensitive)) {
+        if (effectiveUrl.startsWith(QLatin1Char('/')) || effectiveUrl.startsWith(QStringLiteral("uploads/"))) {
+            QString base = ApiClient::baseUrl();
+            if (!effectiveUrl.startsWith(QLatin1Char('/'))) base += QLatin1Char('/');
+            effectiveUrl = base + effectiveUrl;
+        }
+    }
 
-    // 3. Check memory cache for exact requested URL
+    // 3. Optimize URL for Cloudinary if applicable
+    const bool isCloudinary = effectiveUrl.contains(QStringLiteral("res.cloudinary.com"));
+    const QString reqUrl = (isCloudinary && preferredSize.isValid() && preferredSize.width() > 0)
+                               ? getOptimizedCloudinaryUrl(effectiveUrl, preferredSize, preferredSize.width() <= 120)
+                               : effectiveUrl;
+
+    // 4. Check memory cache for exact requested URL
     if (cache_.contains(reqUrl) && !cache_[reqUrl].isNull()) {
         if (callback) callback(cache_[reqUrl]);
         return;
     }
 
     // If master URL is cached and it's large enough (not a downscaled thumbnail)
-    if (cache_.contains(trimmed) && !cache_[trimmed].isNull()) {
-        const QPixmap &master = cache_[trimmed];
+    if (cache_.contains(effectiveUrl) && !cache_[effectiveUrl].isNull()) {
+        const QPixmap &master = cache_[effectiveUrl];
         const int minReqW = preferredSize.isValid() ? preferredSize.width() : 0;
         const int minReqH = preferredSize.isValid() ? preferredSize.height() : 0;
         if (master.width() >= minReqW && master.height() >= minReqH) {
@@ -317,9 +329,9 @@ void ImageLoader::fetchPixmap(const QString &pathOrUrl,
         return;
     }
 
-    // Only fallback to disk cache for trimmed if request was for the full original
-    if (reqUrl == trimmed && loadFromDiskCache(trimmed, diskPix)) {
-        cache_.insert(trimmed, diskPix);
+    // Only fallback to disk cache for effectiveUrl if request was for the full original
+    if (reqUrl == effectiveUrl && loadFromDiskCache(effectiveUrl, diskPix)) {
+        cache_.insert(effectiveUrl, diskPix);
         if (callback) callback(diskPix);
         return;
     }

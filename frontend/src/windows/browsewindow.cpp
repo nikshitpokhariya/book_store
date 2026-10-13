@@ -146,7 +146,7 @@ void BrowseWindow::setupUI()
     });
 
     auto *refreshSc = new QShortcut(QKeySequence::Refresh, this);
-    connect(refreshSc, &QShortcut::activated, this, &BrowseWindow::loadBooks);
+    connect(refreshSc, &QShortcut::activated, this, &BrowseWindow::fetchBooks);
 
     auto *prevSc = new QShortcut(QKeySequence(Qt::Key_BracketLeft), this);
     connect(prevSc, &QShortcut::activated, this, [this]() {

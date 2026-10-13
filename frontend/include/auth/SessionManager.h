@@ -11,6 +11,8 @@
 // and token expiry for the currently logged-in user.
 // =========================================================
 
+class QTimer;
+
 class SessionManager : public QObject
 {
     Q_OBJECT
@@ -54,6 +56,7 @@ private:
     QString m_userId;
     QString m_username;
     QDateTime m_tokenExpiresAt;
+    QTimer *m_refreshTimer{nullptr};
 };
 
 #endif // SESSIONMANAGER_H

@@ -234,15 +234,39 @@ set PATH=C:\Qt\6.12.0\msvc2022_64\bin;%PATH%
 .\frontend\build\Desktop_Qt_6_12_0_MSVC2022_64bit_Debug\BookBazzar.exe
 ```
 
----
+## Configuration & Production Backend Integration
 
-## Configuration
+The backend REST API base URL is centralized in `frontend/include/network/ApiClient.h`.
 
-The API base URL is configured in `ApiClient.h`:
+### Resolution Priority
+
+1. **Runtime Override**: `ApiClient::setBaseUrl("https://...")` programmatically at application startup.
+2. **Environment Variable**: `BOOKBAZZAR_API_URL` (ideal for local testing against Render before packaging, or switching back to localhost).
+3. **Compile-Time Default**: `ApiClient::kBaseUrl` (defaults to `kDefaultProductionUrl` in `ApiClient.h`).
 
 ```cpp
-// Default — update for production deployment
-static constexpr const char* BASE_URL = "http://127.0.0.1:8080";
+// In frontend/include/network/ApiClient.h:
+static constexpr const char *kDefaultProductionUrl = "https://book-baazar.onrender.com";
+static constexpr const char *kDefaultLocalUrl      = "http://127.0.0.1:8080";
+static constexpr const char *kBaseUrl              = kDefaultProductionUrl;
+```
+
+### Pre-Packaging Testing with Production Render Backend
+
+To test the desktop client against your live Render backend without recompiling:
+
+```cmd
+:: In Command Prompt:
+set BOOKBAZZAR_API_URL=https://<your-render-service>.onrender.com
+set PATH=C:\Qt\6.12.0\msvc2022_64\bin;%PATH%
+.\frontend\build\Desktop_Qt_6_12_0_MSVC2022_64bit_Debug\BookBazzar.exe
+```
+
+Or in PowerShell:
+```powershell
+$env:BOOKBAZZAR_API_URL = "https://<your-render-service>.onrender.com"
+$env:PATH = "C:\Qt\6.12.0\msvc2022_64\bin;" + $env:PATH
+.\frontend\build\Desktop_Qt_6_12_0_MSVC2022_64bit_Debug\BookBazzar.exe
 ```
 
 ---

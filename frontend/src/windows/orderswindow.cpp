@@ -97,7 +97,7 @@ void OrdersWindow::setupUI()
     connect(escSc, &QShortcut::activated, this, &OrdersWindow::handleBack);
 
     auto *refreshSc = new QShortcut(QKeySequence::Refresh, this);
-    connect(refreshSc, &QShortcut::activated, this, &OrdersWindow::loadOrders);
+    connect(refreshSc, &QShortcut::activated, this, &OrdersWindow::refreshOrders);
 
     auto *prevSc = new QShortcut(QKeySequence(Qt::Key_BracketLeft), this);
     connect(prevSc, &QShortcut::activated, this, [this]() {

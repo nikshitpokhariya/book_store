@@ -7,6 +7,7 @@
 #include <QPushButton>
 #include <QFrame>
 #include <QGraphicsDropShadowEffect>
+#include <QKeyEvent>
 
 StyledMessageBox::StyledMessageBox(Type type,
                                    const QString &title,

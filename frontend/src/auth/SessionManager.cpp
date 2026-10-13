@@ -1,4 +1,6 @@
 #include "auth/SessionManager.h"
+#include "network/ApiClient.h"
+#include <QTimer>
 
 SessionManager &SessionManager::instance()
 {
@@ -8,7 +10,14 @@ SessionManager &SessionManager::instance()
 
 SessionManager::SessionManager(QObject *parent)
     : QObject(parent)
+    , m_refreshTimer(new QTimer(this))
 {
+    m_refreshTimer->setSingleShot(true);
+    connect(m_refreshTimer, &QTimer::timeout, this, []() {
+        if (!SessionManager::instance().accessToken().isEmpty()) {
+            ApiClient::instance().refreshToken();
+        }
+    });
 }
 
 bool SessionManager::isLoggedIn() const
@@ -27,10 +36,23 @@ void SessionManager::setSession(const QString &accessToken,
     // Give a 60-second safety buffer before the server-side expiry
     m_tokenExpiresAt = QDateTime::currentDateTimeUtc()
                            .addSecs(expiresInSeconds - 60);
+
+    // Schedule proactive token refresh ~2 minutes before expiration (or half duration if short)
+    if (m_refreshTimer) {
+        m_refreshTimer->stop();
+        if (expiresInSeconds > 0) {
+            qint64 refreshSecs = (expiresInSeconds > 240) ? (expiresInSeconds - 120) : (expiresInSeconds / 2);
+            if (refreshSecs < 10) refreshSecs = 10;
+            m_refreshTimer->start(static_cast<int>(refreshSecs * 1000));
+        }
+    }
 }
 
 void SessionManager::clearSession()
 {
+    if (m_refreshTimer) {
+        m_refreshTimer->stop();
+    }
     m_accessToken.clear();
     m_userId.clear();
     m_username.clear();

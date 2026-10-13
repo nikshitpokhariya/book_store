@@ -1,6 +1,7 @@
 #include "VideoPlayerWidget.h"
 #include "VideoThumbnailHelper.h"
 #include "ImageLoader.h"
+#include "network/ApiClient.h"
 #include "AppStyle.h"
 
 #include <QVBoxLayout>
@@ -221,9 +222,20 @@ void VideoPlayerWidget::setVideoSource(const QString &urlOrPath, const QString &
         resolvedLocalPath_ = local;
         initDirectShow(resolvedLocalPath_);
         refreshPoster();
-    } else if (currentSource_.startsWith(QStringLiteral("http://"), Qt::CaseInsensitive) ||
-               currentSource_.startsWith(QStringLiteral("https://"), Qt::CaseInsensitive)) {
-        downloadRemoteVideo(currentSource_);
+    } else {
+        QString effectiveUrl = currentSource_;
+        if (!effectiveUrl.startsWith(QStringLiteral("http://"), Qt::CaseInsensitive) &&
+            !effectiveUrl.startsWith(QStringLiteral("https://"), Qt::CaseInsensitive)) {
+            if (effectiveUrl.startsWith(QLatin1Char('/')) || effectiveUrl.startsWith(QStringLiteral("uploads/"))) {
+                QString base = ApiClient::baseUrl();
+                if (!effectiveUrl.startsWith(QLatin1Char('/'))) base += QLatin1Char('/');
+                effectiveUrl = base + effectiveUrl;
+            }
+        }
+        if (effectiveUrl.startsWith(QStringLiteral("http://"), Qt::CaseInsensitive) ||
+            effectiveUrl.startsWith(QStringLiteral("https://"), Qt::CaseInsensitive)) {
+            downloadRemoteVideo(effectiveUrl);
+        }
     }
 }
 
