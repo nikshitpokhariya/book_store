@@ -12,6 +12,7 @@
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <filesystem>
 
 #ifdef _WIN32
 #include <process.h>
@@ -82,7 +83,12 @@ void uploadViaCurlFallback(
   out.close();
 
   std::string url = "https://api.cloudinary.com/v1_1/" + cloudName + "/" + resourceType + "/upload";
-  std::string cmd = "curl.exe -s -X POST \"" + url + "\" " +
+#ifdef _WIN32
+  std::string curlBin = "curl.exe";
+#else
+  std::string curlBin = "curl";
+#endif
+  std::string cmd = curlBin + " -s -X POST \"" + url + "\" " +
                     "-F \"file=@" + tempFile + "\" " +
                     "-F \"api_key=" + apiKey + "\" " +
                     "-F \"timestamp=" + timestamp + "\" " +
@@ -311,8 +317,17 @@ void UploadController::previewMedia(
     std::string filename = targetUrl;
     auto pos = filename.rfind('/');
     if (pos != std::string::npos) filename = filename.substr(pos + 1);
-    std::string filePath = "./public/uploads/" + filename;
-    auto resp = drogon::HttpResponse::newFileResponse(filePath);
+    if (filename.find("..") != std::string::npos || filename.find('\\') != std::string::npos) {
+      callback(jsonError(k400BadRequest, "Invalid filename"));
+      return;
+    }
+    std::filesystem::path filePath = std::filesystem::path("./public/uploads") / filename;
+    if (!std::filesystem::exists(filePath) || !std::filesystem::is_regular_file(filePath)) {
+      auto resp = drogon::HttpResponse::newNotFoundResponse();
+      callback(resp);
+      return;
+    }
+    auto resp = drogon::HttpResponse::newFileResponse(filePath.string());
     callback(resp);
     return;
   }

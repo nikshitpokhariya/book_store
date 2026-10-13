@@ -7,6 +7,8 @@ class AppConfig {
 public:
   static const AppConfig &instance();
 
+  uint16_t port() const;
+
   const std::string &mongoUri() const;
   const std::string &mongoDatabase() const;
 
@@ -25,6 +27,7 @@ public:
 private:
   AppConfig();
 
+  uint16_t port_{8080};
   std::string mongoUri_;
   std::string mongoDatabase_;
 

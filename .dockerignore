@@ -1,0 +1,27 @@
+# Git and editor files
+.git/
+.github/
+.vscode/
+.kilo/
+
+# Desktop Frontend
+frontend/
+
+# Backend local artifacts and secrets
+backend/build/
+backend/build-*/
+backend/cmake-build-*/
+backend/vcpkg_installed/
+backend/.env
+backend/.env.*
+!backend/.env.example
+backend/*.log
+backend/*.exe
+backend/*.obj
+backend/*.pdb
+backend/*.dll
+backend/*.lib
+
+# Logs and batch files
+*.log
+start_backend.bat

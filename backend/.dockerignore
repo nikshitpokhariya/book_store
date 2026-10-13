@@ -1,0 +1,16 @@
+# Backend local artifacts and secrets
+build/
+build-*/
+cmake-build-*/
+vcpkg_installed/
+.env
+.env.*
+!.env.example
+*.log
+*.exe
+*.obj
+*.pdb
+*.dll
+*.lib
+.vs/
+.vscode/

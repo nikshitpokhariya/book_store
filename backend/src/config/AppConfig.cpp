@@ -78,7 +78,13 @@ bool getBoolEnv(const char *name, bool defaultValue) {
 AppConfig::AppConfig() {
   loadDotEnv();
 
-  mongoUri_ = getEnv("MONGO_URI", "mongodb://127.0.0.1:27017");
+  auto portVal = getIntEnv("PORT", 8080);
+  if (portVal <= 0 || portVal > 65535) {
+    portVal = 8080;
+  }
+  port_ = static_cast<uint16_t>(portVal);
+
+  mongoUri_ = getEnv("MONGO_URI");
   mongoDatabase_ = getEnv("MONGO_DATABASE", "myapp");
   jwtSecret_ = getEnv("JWT_SECRET");
   jwtIssuer_ = getEnv("JWT_ISSUER", "myapp-api");
@@ -99,6 +105,8 @@ const AppConfig &AppConfig::instance() {
   static const AppConfig config;
   return config;
 }
+
+uint16_t AppConfig::port() const { return port_; }
 
 const std::string &AppConfig::mongoUri() const { return mongoUri_; }
 
