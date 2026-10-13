@@ -11,6 +11,7 @@
 #include <mongocxx/options/find.hpp>
 
 #include <cmath>
+#include <cstdint>
 #include <stdexcept>
 #include <unordered_set>
 

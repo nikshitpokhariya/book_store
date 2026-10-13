@@ -1,5 +1,6 @@
 #include "config/AppConfig.h"
 
+#include <cstdint>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>

@@ -1,6 +1,7 @@
 #include "db/MongoDatabase.h"
 #include "config/AppConfig.h"
 
+#include <chrono>
 #include <mongocxx/options/index.hpp>
 
 #include <bsoncxx/builder/basic/document.hpp>

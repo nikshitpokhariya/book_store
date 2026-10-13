@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 using bsoncxx::builder::basic::document;
 using bsoncxx::builder::basic::kvp;

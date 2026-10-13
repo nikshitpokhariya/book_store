@@ -5,6 +5,7 @@
 #include "repositories/UserRepository.h"
 #include "services/AuthService.h"
 
+#include <cstdint>
 #include <drogon/drogon.h>
 
 using namespace drogon;

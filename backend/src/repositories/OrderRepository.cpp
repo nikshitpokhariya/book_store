@@ -10,6 +10,7 @@
 #include <mongocxx/options/find.hpp>
 
 #include <cmath>
+#include <cstdint>
 
 using bsoncxx::builder::basic::array;
 using bsoncxx::builder::basic::document;
