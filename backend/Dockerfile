@@ -11,6 +11,11 @@ FROM ubuntu:24.04 AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 ENV VCPKG_ROOT=/opt/vcpkg
 
+# Limit concurrency to 1-2 build jobs to prevent exceeding Render's 8GB RAM ceiling
+ARG BUILD_CONCURRENCY=2
+ENV VCPKG_MAX_CONCURRENCY=${BUILD_CONCURRENCY}
+ENV CMAKE_BUILD_PARALLEL_LEVEL=${BUILD_CONCURRENCY}
+
 # Install build prerequisites and native compilation tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -29,27 +34,36 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Clone and bootstrap vcpkg
-RUN git clone https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT" \
+# Clone shallow vcpkg repo to reduce disk and memory overhead
+RUN git clone --depth=1 https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT" \
     && "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
 
 WORKDIR /app/backend
 
-# Copy vcpkg manifest first for layer caching
+# Copy vcpkg manifest and custom Release-only triplet first for layer caching
 COPY backend/vcpkg.json /app/backend/
+COPY backend/triplets/ /app/backend/triplets/
 
-# Pre-install dependencies in manifest mode
-RUN "$VCPKG_ROOT/vcpkg" install --triplet x64-linux
+# Configure base triplet to Release-only to avoid compiling unneeded Debug binaries
+RUN cp /app/backend/triplets/x64-linux.cmake "$VCPKG_ROOT/triplets/community/x64-linux.cmake" \
+    && cp /app/backend/triplets/x64-linux.cmake "$VCPKG_ROOT/triplets/x64-linux.cmake"
+
+# Pre-install dependencies in manifest mode with strictly capped concurrency (1-2)
+RUN "$VCPKG_ROOT/vcpkg" install \
+    --triplet x64-linux \
+    --overlay-triplets=/app/backend/triplets \
+    --clean-after-build
 
 # Copy backend source tree
 COPY backend/ /app/backend/
 
-# Configure and compile Release executable
+# Configure and compile Release executable with capped parallel jobs
 RUN cmake -S . -B build -G Ninja \
     -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
     -DVCPKG_TARGET_TRIPLET=x64-linux \
+    -DVCPKG_OVERLAY_TRIPLETS=/app/backend/triplets \
     -DCMAKE_BUILD_TYPE=Release \
-    && cmake --build build --parallel 2 \
+    && cmake --build build --parallel ${BUILD_CONCURRENCY} \
     && strip /app/backend/build/BookExchangeBackend
 
 # Collect dynamic shared libraries (.so) produced by vcpkg
