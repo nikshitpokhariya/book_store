@@ -1,4 +1,4 @@
-# BookExchangeBackend
+# BookBazzar — Drogon C++20 REST API Backend
 
 C++20 REST API backend for BookBazzar, built with [Drogon](https://github.com/drogonframework/drogon) and MongoDB Atlas. Provides authentication, book listings, cart, atomic checkout, order lifecycle, peer-to-peer barter exchanges, verified reviews, and Cloudinary media upload.
 
@@ -40,7 +40,7 @@ backend/
 | :--- | :--- | :--- |
 | Language | C++ | ISO C++20 |
 | HTTP framework | Drogon | 1.9.x |
-| Database | MongoDB Atlas — mongocxx | 7.x / 8.0 |
+| Database | MongoDB Atlas — mongocxx | 8.0 |
 | Password hashing | Argon2id | — |
 | Cryptography | OpenSSL | 3.x |
 | Auth tokens | jwt-cpp — HS256 | 0.7.x |
@@ -193,7 +193,7 @@ Protected routes require `Authorization: Bearer <jwt>`.
 ### Upload — `/api/upload`
 | Method | Route | Auth | Description |
 | :--- | :--- | :---: | :--- |
-| `POST` | `/api/upload` | Public | Multipart file → Cloudinary CDN |
+| `POST` | `/api/upload` | Bearer | Multipart file → Cloudinary CDN |
 
 ---
 

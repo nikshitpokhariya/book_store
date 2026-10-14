@@ -39,7 +39,7 @@ graph TD
     end
 
     subgraph Remote ["Backend Services"]
-        Backend["Drogon REST API Backend<br/>(http://127.0.0.1:8080)"]
+        Backend["Drogon REST API Backend<br/>(https://book-baazar.onrender.com or http://127.0.0.1:8080)"]
     end
 
     Screens -->|Apply styles| AppStyle
@@ -119,8 +119,12 @@ frontend/
 │   │   └── SessionManager.h        # JWT lifecycle & user state — Singleton
 │   ├── common/
 │   │   ├── AppStyle.h              # Design system tokens & stylesheets
+│   │   ├── CancelOrderDialog.h     # Pre-shipment cancellation dialog
 │   │   ├── ImageLoader.h           # Async pixmap cache
-│   │   └── StyledMessageBox.h      # Styled alert/confirm dialogs
+│   │   ├── ProposeExchangeDialog.h # Barter proposal dialog
+│   │   ├── StyledMessageBox.h      # Styled alert/confirm dialogs
+│   │   ├── VideoPlayerWidget.h     # Inline video preview widget
+│   │   └── VideoThumbnailHelper.h  # Async video thumbnail extractor
 │   ├── models/
 │   │   └── DataModels.h            # Typed models: Book, Cart, Order, Exchange, Review
 │   ├── network/
@@ -132,6 +136,7 @@ frontend/
 │       ├── CheckoutWindow.h        # Checkout modal — UPI, CARD, COD
 │       ├── ExchangeWindow.h        # Two-sided barter proposal & acceptance
 │       ├── homewindow.h            # Marketplace hub — hero, categories, recent
+│       ├── ImageInspectionDialog.h # Full-screen image inspection overlay
 │       ├── listingswindow.h        # Seller inventory management
 │       ├── loginwindow.h           # Login screen
 │       ├── OrderDetailWindow.h     # Delivery tracker & return request
@@ -145,12 +150,18 @@ frontend/
 │   │   └── SessionManager.cpp
 │   ├── common/
 │   │   ├── AppStyle.cpp
+│   │   ├── CancelOrderDialog.cpp
 │   │   ├── ImageLoader.cpp
-│   │   └── StyledMessageBox.cpp
+│   │   ├── ProposeExchangeDialog.cpp
+│   │   ├── StyledMessageBox.cpp
+│   │   ├── VideoPlayerWidget.cpp
+│   │   └── VideoThumbnailHelper.cpp
 │   ├── network/
 │   │   └── ApiClient.cpp
-│   └── windows/                    # All 12 window implementations
+│   └── windows/                    # All 13 window implementations
+│       └── ImageInspectionDialog.cpp
 │
+├── installer/                      # Inno Setup 6 packaging (see installer/README.md)
 ├── tests/                          # Qt Test suites (unit + GUI smoke)
 └── ui/loginwindow.ui               # Qt Designer login layout
 ```

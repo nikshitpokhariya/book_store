@@ -10,6 +10,14 @@ This directory contains the Inno Setup 6 packaging configuration for the **BookB
 - **Output Setup Executable**: `frontend/dist/BookBazzar-Setup-0.1.0.exe`
 - **Compression**: Solid `lzma2/ultra64`
 
+## Pre-Built Installer (v0.1.0)
+
+The compiled installer for the latest release is available on GitHub:
+
+**[BookBazzar-Setup-0.1.0.exe](https://github.com/nikshitpokhariya/book_store/releases/download/v0.1.0/BookBazzar-Setup-0.1.0.exe)** — Windows x64 (v0.1.0)
+
+> **Windows Defender SmartScreen notice:** Because this installer is newly published and has not yet accumulated a reputation, Windows may display a SmartScreen warning when you run it. This is expected behavior for newly released software. To proceed, click **More info → Run anyway** if you trust the source. Do not disable Windows Defender or other security protections on your system.
+
 ## Packaged Content & Dependencies
 The installer packages the pre-deployed release distribution located in `frontend/dist/BookBazzar/`:
 - **Main Executable**: `BookBazzar.exe`
@@ -58,7 +66,7 @@ Run the automated build script from the project root:
   ```
 - **Direct Inno Setup Compiler**:
   ```cmd
-  "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "D:\1Hello-World\1pbl-oops\frontend\installer\BookBazzar.iss"
+  "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "frontend\installer\BookBazzar.iss"
   ```
 
 Upon completion, `frontend/dist/BookBazzar-Setup-0.1.0.exe` will be generated alongside the existing `BookBazzar-v0.1-Windows-x64.zip` release archive.
